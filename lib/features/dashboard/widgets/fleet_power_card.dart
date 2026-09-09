@@ -40,8 +40,14 @@ class FleetPowerCard extends ConsumerWidget {
         // last data lands in an old bucket) would draw a misleading ramp.
         final maxReporting = data.fold(0, (a, x) => x.stationsReporting > a ? x.stationsReporting : a);
         final sorted = data.where((x) => x.stationsReporting >= maxReporting * 0.5).toList()..sort((x, y) => x.bucketTs.compareTo(y.bucketTs));
-        if (sorted.isEmpty) return const SizedBox.shrink();
         final hidden = data.length - sorted.length;
+        if (sorted.length < 2) {
+          return const SectionCard(
+            title: 'Fleet power today',
+            subtitle: 'Sum over reporting plants, 15-min buckets',
+            child: SizedBox(height: 200, child: EmptyState(message: 'Collecting fleet power – the curve fills in after a few synchronisation cycles.', icon: Icons.hourglass_top)),
+          );
+        }
         final series = [
           TimeSeries(label: 'PV', color: p.pv, area: true, points: [for (final x in sorted) (x.bucketTs, x.generationW)]),
           TimeSeries(label: 'Load', color: p.load, points: [for (final x in sorted) (x.bucketTs, x.consumptionW)]),
