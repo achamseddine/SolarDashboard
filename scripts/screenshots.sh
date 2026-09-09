@@ -1,30 +1,44 @@
 #!/usr/bin/env bash
 # Captures screenshots of the Linux desktop build in demo mode under Xvfb.
-# Usage: scripts/screenshots.sh [out_dir]   (requires xvfb-run, xwd, convert, xdotool)
+# Usage: scripts/screenshots.sh [out_dir]
+# Env:   FAKE_TIME='2026-09-09 10:30:00'  run the app under libfaketime (e.g. midday in Beirut)
+#        DARK=1                            capture the dark theme
+# Requires: xvfb-run, xwd, convert (ImageMagick), xdotool, optionally faketime.
 set -euo pipefail
 OUT=${1:-docs/screenshots}
 BUNDLE=build/linux/x64/release/bundle
-mkdir -p "$OUT" "$HOME/.local/share/unicef_solar_monitor"
-# Demo mode on, screen wakelock off (no display server power management under Xvfb).
-cat > "$HOME/.local/share/unicef_solar_monitor/shared_preferences.json" <<'JSON'
-{"flutter.settings.demoMode": true, "flutter.settings.keepScreenOn": false}
+PREFS="$HOME/.local/share/unicef_solar_monitor"
+mkdir -p "$OUT" "$PREFS"
+DARK_JSON=$([ "${DARK:-0}" = "1" ] && echo true || echo false)
+cat > "$PREFS/shared_preferences.json" <<JSON
+{"flutter.settings.demoMode": true, "flutter.settings.keepScreenOn": false, "flutter.settings.darkMode": $DARK_JSON}
 JSON
-rm -f "$HOME/.local/share/unicef_solar_monitor"/unicef_solar.db*
-xvfb-run -a -s "-screen 0 1440x900x24" bash -c "
-  ./$BUNDLE/unicef_solar_monitor > /tmp/app_screens.log 2>&1 &
-  APP=\$!
-  sleep 40
-  shot() { sleep 3; xwd -root -silent | convert xwd:- \"$OUT/\$1.png\"; }
-  # Navigation rail items (x=95 in extended rail, y positions from the shell layout).
+rm -f "$PREFS"/unicef_solar.db*
+SUFFIX=$([ "${DARK:-0}" = "1" ] && echo "_dark" || echo "")
+LAUNCH="./$BUNDLE/unicef_solar_monitor"
+if [ -n "${FAKE_TIME:-}" ]; then LAUNCH="faketime '$FAKE_TIME' $LAUNCH"; fi
+export OUT SUFFIX LAUNCH
+xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
+  eval "$LAUNCH" > /tmp/app_screens.log 2>&1 &
+  APP=$!
+  sleep 45
+  shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x800+0+0 +repage "$OUT/$1$SUFFIX.png"; }
+  scroll() { xdotool mousemove 700 500; for i in $(seq 1 "$1"); do xdotool click 5; done; }
+  # Navigation rail items (x=95 in the extended rail).
   xdotool mousemove 95 150 click 1; shot dashboard
-  xdotool mousemove 700 500; for i in 1 2 3; do xdotool click 5; done; shot dashboard_2
-  for i in 1 2 3 4 5 6; do xdotool click 5; done; shot dashboard_3
+  scroll 4; shot dashboard_2
+  scroll 6; shot dashboard_3
+  scroll 6; shot dashboard_4
+  scroll 8; shot dashboard_5
   xdotool mousemove 95 194 click 1; shot schools
-  xdotool mousemove 500 330 click 1; shot school_detail
-  xdotool mousemove 700 500; for i in 1 2 3 4; do xdotool click 5; done; shot school_detail_2
+  xdotool mousemove 500 330 click 1; sleep 4; shot school_detail
+  scroll 4; shot school_detail_2
+  scroll 6; shot school_detail_3
+  scroll 8; shot school_detail_4
   xdotool mousemove 95 238 click 1; shot alarms
-  xdotool mousemove 95 282 click 1; sleep 3; shot map
+  xdotool mousemove 95 282 click 1; sleep 4; shot map
   xdotool mousemove 95 326 click 1; shot settings
-  kill \$APP
-"
-echo "Screenshots in $OUT"; ls -la "$OUT"
+  scroll 8; shot settings_2
+  kill $APP
+'
+echo "Screenshots in $OUT"; ls "$OUT"
