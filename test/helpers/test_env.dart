@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,4 +61,29 @@ class TestEnv {
       );
 
   Future<void> dispose() => db.close();
+
+  /// Creates the environment from inside a widget test (real async zone).
+  static Future<TestEnv> createFor(WidgetTester tester, {int schools = 20}) async {
+    late TestEnv env;
+    await tester.runAsync(() async => env = await create(schools: schools));
+    return env;
+  }
+
+  /// Flushes late real-time work and pending fake timers (call at the end of
+  /// a test that triggers background writes, e.g. a station refresh).
+  static Future<void> drain(WidgetTester tester) async {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 800)));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
+  }
+
+  /// Lets real async work (database queries) complete, then pumps frames and
+  /// fires the database change debounce so providers rebuild.
+  static Future<void> settle(WidgetTester tester, {int rounds = 3}) async {
+    for (var i = 0; i < rounds; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+    }
+  }
 }

@@ -77,7 +77,7 @@ class KpiTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: EdgeInsets.all(dense ? 12 : 16),
+          padding: EdgeInsets.all(dense ? 10 : 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -91,15 +91,15 @@ class KpiTile extends StatelessWidget {
                   Expanded(child: Text(label, style: t.labelLarge?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
                 ],
               ),
-              SizedBox(height: dense ? 4 : 8),
+              SizedBox(height: dense ? 2 : 6),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(value, style: (dense ? t.titleLarge : t.headlineSmall)?.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+                child: Text(value, style: (dense ? t.titleLarge : t.headlineSmall)?.copyWith(fontWeight: FontWeight.w700)),
               ),
               if (hint != null) ...[
-                const SizedBox(height: 4),
-                Text(hint!, style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Flexible(child: Text(hint!, style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis)),
               ],
             ],
           ),
@@ -241,26 +241,29 @@ class ErrorState extends StatelessWidget {
   Widget build(BuildContext context) => EmptyState(message: message, icon: Icons.error_outline);
 }
 
-/// Responsive grid of equally sized tiles.
+/// Responsive grid of equally sized tiles with a fixed tile height.
+///
+/// [aspect] is kept for API compatibility but the tile height is governed by
+/// [tileHeight] so multi-line hints never overflow.
 class TileGrid extends StatelessWidget {
-  const TileGrid({super.key, required this.children, this.minTileWidth = 190, this.aspect = 1.9, this.gap = kGap});
+  const TileGrid({super.key, required this.children, this.minTileWidth = 190, this.aspect = 1.9, this.gap = kGap, this.tileHeight});
   final List<Widget> children;
   final double minTileWidth;
   final double aspect;
   final double gap;
+  final double? tileHeight;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final cols = (c.maxWidth / minTileWidth).floor().clamp(1, 8);
-      return GridView.count(
-        crossAxisCount: cols,
+      final height = tileHeight ?? (aspect >= 2.4 ? 88.0 : 118.0);
+      return GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: aspect,
-        mainAxisSpacing: gap,
-        crossAxisSpacing: gap,
-        children: children,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisExtent: height, mainAxisSpacing: gap, crossAxisSpacing: gap),
+        itemCount: children.length,
+        itemBuilder: (_, i) => children[i],
       );
     });
   }

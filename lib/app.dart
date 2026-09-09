@@ -28,7 +28,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/dashboard', pageBuilder: (c, s) => const NoTransitionPage(child: DashboardScreen())),
           GoRoute(
             path: '/stations',
-            pageBuilder: (c, s) => NoTransitionPage(child: StationsScreen(initialQuery: s.uri.queryParameters['q'], initialRegion: s.uri.queryParameters['region'], initialStatus: s.uri.queryParameters['status'])),
+            pageBuilder: (c, s) => NoTransitionPage(child: StationsScreen(initialQuery: s.uri.queryParameters['q'], initialRegion: s.uri.queryParameters['region'], initialStatus: s.uri.queryParameters['status'], initialFilter: s.uri.queryParameters['filter'])),
             routes: [
               GoRoute(
                 path: ':id',
