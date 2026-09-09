@@ -61,6 +61,15 @@ class SyncEngine {
   int _transientFailures = 0;
   int _breakerTrips = 0;
   final Map<int, int> _stationRefreshAt = {};
+  final List<String> _phaseFailures = [];
+
+  /// Failures of the last sweep's phases (empty when everything succeeded).
+  List<String> get lastPhaseFailures => List.unmodifiable(_phaseFailures);
+
+  static String _short(Object e) {
+    final s = e.toString();
+    return s.length > 160 ? '${s.substring(0, 160)}…' : s;
+  }
 
   Stream<SyncStatus> get statusStream => _statusCtl.stream;
   SyncStatus get status => _status;
@@ -120,6 +129,7 @@ class SyncEngine {
   Future<void> _sweep() async {
     _lastSweepStart = _clock();
     _transientFailures = 0;
+    _phaseFailures.clear();
     _emit(_status.copyWith(running: true, phase: SyncPhase.auth, current: 0, total: 0, clearMessage: true, startedAt: _lastSweepStart, clearPaused: true));
     final sweepLog = await db.sync.logStart('sweep', now: _now());
     var ok = true;
@@ -167,15 +177,17 @@ class SyncEngine {
       failure = e.toString();
       log?.call('Sweep failed: $e');
     }
-    await db.sync.logFinish(sweepLog, ok: ok, message: failure, now: _now());
+    if (ok && _phaseFailures.isNotEmpty) failure = _phaseFailures.join(' · ');
+    await db.sync.logFinish(sweepLog, ok: ok && _phaseFailures.isEmpty, message: failure, now: _now());
     final client = api;
     _emit(_status.copyWith(
       running: false,
       phase: ok ? SyncPhase.done : _status.phase,
+      // Data was refreshed even when a phase failed; only an aborted sweep is not a success.
       lastSuccessAt: ok ? _clock() : null,
       lastError: failure,
-      clearError: ok,
-      errorCount: ok ? _status.errorCount : _status.errorCount + 1,
+      clearError: failure == null,
+      errorCount: ok && _phaseFailures.isEmpty ? _status.errorCount : _status.errorCount + 1,
       requestCount: client.requestCount,
       alertsUnsupportedReason: client.alertsUnsupported ? client.alertsUnsupportedReason : null,
       clearAlertsUnsupported: !client.alertsUnsupported,
@@ -200,6 +212,7 @@ class SyncEngine {
     } catch (e) {
       await db.sync.logFinish(id, ok: false, message: e.toString(), now: _now());
       log?.call('Phase ${phase.name} failed: $e');
+      _phaseFailures.add('${phase.label}: ${_short(e)}');
       _emit(_status.copyWith(lastError: '${phase.label}: $e', errorCount: _status.errorCount + 1));
       if (e is DeyeApiException && (e.code == 'AUTH_LOCKED' || (e.isAuthError && phase == SyncPhase.auth))) {
         throw SyncAborted('Credentials rejected: ${e.message}');

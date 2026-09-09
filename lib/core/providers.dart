@@ -89,18 +89,23 @@ final canSyncProvider = Provider<bool>((ref) {
 
 // ---------------------------------------------------------------------- api
 
+/// The data source. Only rebuilt when credentials or the settings that
+/// affect the client change (demo mode, concurrency, alert path overrides).
 final apiProvider = Provider<DeyeApi>((ref) {
-  final settings = ref.watch(settingsProvider);
+  final demo = ref.watch(settingsProvider.select((s) => s.demoMode));
+  final concurrency = ref.watch(settingsProvider.select((s) => s.maxConcurrentRequests));
+  final alertStationPath = ref.watch(settingsProvider.select((s) => s.alertStationPath));
+  final alertDevicePath = ref.watch(settingsProvider.select((s) => s.alertDevicePath));
   final creds = ref.watch(credentialsProvider);
   final log = ref.read(appLogProvider.notifier);
-  if (settings.demoMode || creds == null || !creds.isComplete) {
+  if (demo || creds == null || !creds.isComplete) {
     return DemoDeyeApi();
   }
   return DeyeApiClient(
     credentials: creds,
     tokenCache: ref.read(credentialStoreProvider),
-    limiter: RateLimiter(maxConcurrent: settings.maxConcurrentRequests),
-    alertConfig: AlertEndpointConfig(stationPath: settings.alertStationPath, devicePath: settings.alertDevicePath),
+    limiter: RateLimiter(maxConcurrent: concurrency),
+    alertConfig: AlertEndpointConfig(stationPath: alertStationPath, devicePath: alertDevicePath),
     log: log.add,
   );
 });

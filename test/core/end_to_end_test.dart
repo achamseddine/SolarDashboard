@@ -36,6 +36,8 @@ void main() {
     expect(counts['alerts'], greaterThan(0));
     expect(counts['sync_log'], greaterThan(5));
     expect(engine.status.lastError, isNull, reason: logs.join('\n'));
+    final phases = await db.sync.recentLogs(limit: 100);
+    expect(phases.where((p) => p.ok != true).map((p) => '${p.kind}: ${p.message}'), isEmpty, reason: 'every phase must succeed');
 
     final stations = await db.stations.getStations();
     expect(stations.where((s) => s.region != null).length, 30, reason: 'every demo school resolves a governorate');
