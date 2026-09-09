@@ -8,6 +8,7 @@ import 'core/theme.dart';
 import 'features/alarms/alarms_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/map/map_screen.dart';
+import 'features/overview/overview_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/app_shell.dart';
 import 'features/stations/station_detail_screen.dart';
@@ -25,7 +26,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AppShell(location: state.uri.path, child: child),
         routes: [
           GoRoute(path: '/', redirect: (_, _) => '/dashboard'),
-          GoRoute(path: '/dashboard', pageBuilder: (c, s) => const NoTransitionPage(child: DashboardScreen())),
+          GoRoute(path: '/dashboard', pageBuilder: (c, s) => const NoTransitionPage(child: OverviewScreen())),
+          GoRoute(path: '/analytics', pageBuilder: (c, s) => const NoTransitionPage(child: DashboardScreen())),
           GoRoute(
             path: '/stations',
             pageBuilder: (c, s) => NoTransitionPage(child: StationsScreen(initialQuery: s.uri.queryParameters['q'], initialRegion: s.uri.queryParameters['region'], initialStatus: s.uri.queryParameters['status'], initialFilter: s.uri.queryParameters['filter'])),
