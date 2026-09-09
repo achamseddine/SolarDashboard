@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "org.unicef.unicef_solar_monitor"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 11 compiles against API 37 (AGP warns above 36; suppressed in gradle.properties).
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
