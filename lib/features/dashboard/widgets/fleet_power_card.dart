@@ -45,7 +45,7 @@ class FleetPowerCard extends ConsumerWidget {
           return const SectionCard(
             title: 'Fleet power today',
             subtitle: 'Sum over reporting plants, 15-min buckets',
-            child: SizedBox(height: 200, child: EmptyState(message: 'Collecting fleet power – the curve fills in after a few synchronisation cycles.', icon: Icons.hourglass_top)),
+            child: SizedBox(height: 200, child: EmptyState(message: 'Collecting fleet power – the curve fills in after a few synchronisation cycles.', icon: Icons.show_chart)),
           );
         }
         final series = [

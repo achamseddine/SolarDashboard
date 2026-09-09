@@ -161,6 +161,11 @@ class SyncEngine {
         if (await db.sync.metaGet('frames.lastDay') != yesterday) {
           await _phase(SyncPhase.frames, () => _backfillFrames(yesterday), onSuccess: () => db.sync.metaSet('frames.lastDay', yesterday));
         }
+        // First installation: also pull today's frames so the fleet curve is
+        // complete from the first sweep instead of growing bucket by bucket.
+        if (await db.sync.metaGet('frames.todayDone') == null) {
+          await _phase(SyncPhase.frames, () => _backfillFrames(today), onSuccess: () => db.sync.metaSet('frames.todayDone', today));
+        }
       }
       await _phase(SyncPhase.alerts, _syncAlerts);
       await _phase(SyncPhase.rollup, _rollup);
@@ -666,7 +671,9 @@ class SyncEngine {
 
   Future<int> _rollup() async {
     final now = _now();
-    final from = now - 3 * 3600;
+    // Recompute the buckets of the current local day (covers backfilled frames)
+    // and at least the last three hours.
+    final from = math.min(now - 3 * 3600, AppTime.dayStart(AppTime.today()));
     final rows = await db.db.rawQuery('''
       SELECT b, COALESCE(s.region, '') AS region, COUNT(*) n,
              SUM(g) g, SUM(c) c, SUM(gi) gi, SUM(ge) ge, SUM(ch) ch, SUM(dc) dc, AVG(soc) soc
