@@ -23,7 +23,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   APP=$!
   sleep 45
   shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x800+0+0 +repage "$OUT/$1$SUFFIX.png"; }
-  scroll() { xdotool mousemove 700 500; for i in $(seq 1 "$1"); do xdotool click 5; done; }
+  scroll() { xdotool mousemove 200 600; for i in $(seq 1 "$1"); do xdotool click 5; done; }
   # Navigation rail items (x=95 in the extended rail).
   xdotool mousemove 95 150 click 1; shot dashboard
   scroll 4; shot dashboard_2

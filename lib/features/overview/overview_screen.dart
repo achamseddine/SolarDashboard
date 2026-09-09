@@ -47,7 +47,7 @@ class _Overview extends ConsumerWidget {
             title: 'UNICEF school solar fleet — Lebanon',
             subtitle: '${i.totalStations} schools · ${Fmt.capacity(i.installedKwp)} installed · updated ${Fmt.time(i.generatedAt.millisecondsSinceEpoch ~/ 1000)} · ${i.reportingStations} reporting live',
             actions: [
-              OutlinedButton.icon(onPressed: () => goTo(context, '/analytics'), icon: const Icon(Icons.insights_outlined, size: 18), label: const Text('Analytics')),
+              OutlinedButton.icon(onPressed: () => goTo(context, '/analytics'), icon: const Icon(Icons.bar_chart, size: 18), label: const Text('Analytics')),
               const SizedBox(width: 8),
               FilledButton.tonalIcon(
                 onPressed: sync.running ? null : () => ref.read(syncEngineProvider).syncNow(),
