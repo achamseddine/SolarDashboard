@@ -36,8 +36,12 @@ class FleetPowerCard extends ConsumerWidget {
     }
     return Builder(
       builder: (context) {
-        final b = data;
-        final sorted = [...b]..sort((x, y) => x.bucketTs.compareTo(y.bucketTs));
+        // Buckets where only a few plants reported (e.g. stale plants whose
+        // last data lands in an old bucket) would draw a misleading ramp.
+        final maxReporting = data.fold(0, (a, x) => x.stationsReporting > a ? x.stationsReporting : a);
+        final sorted = data.where((x) => x.stationsReporting >= maxReporting * 0.5).toList()..sort((x, y) => x.bucketTs.compareTo(y.bucketTs));
+        if (sorted.isEmpty) return const SizedBox.shrink();
+        final hidden = data.length - sorted.length;
         final series = [
           TimeSeries(label: 'PV', color: p.pv, area: true, points: [for (final x in sorted) (x.bucketTs, x.generationW)]),
           TimeSeries(label: 'Load', color: p.load, points: [for (final x in sorted) (x.bucketTs, x.consumptionW)]),
@@ -49,7 +53,7 @@ class FleetPowerCard extends ConsumerWidget {
         final last = sorted.last;
         return ChartOrTable(
           title: 'Fleet power today',
-          subtitle: 'Sum over reporting plants, 15-min buckets · ${Fmt.time(sorted.first.bucketTs)}–${Fmt.time(last.bucketTs)} · ${last.stationsReporting} plants in last bucket',
+          subtitle: 'Sum over reporting plants, 15-min buckets · ${Fmt.time(sorted.first.bucketTs)}–${Fmt.time(last.bucketTs)} · ${last.stationsReporting} plants in last bucket${hidden > 0 ? ' · $hidden sparse bucket${hidden == 1 ? '' : 's'} hidden' : ''}',
           chart: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

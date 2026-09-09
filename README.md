@@ -66,9 +66,12 @@ More: `docs/screenshots/` (generated with `scripts/screenshots.sh`).
 
 The app needs a DeyeCloud **developer application** (App ID + App Secret from
 https://developer.deyecloud.com/app) and the DeyeCloud **account** (e-mail + password, and the
-**company id** for the UNICEF organisation account). Enter them in *Settings → DeyeCloud account*;
+**company id** for the UNICEF organisation account). Enter them in *Settings → DeyeCloud account*
+and press *Test connection* (it logs in and lists the organisations the account belongs to);
 they are stored in the device secure store (Android Keystore) and never in the database or the
 repository. The password field accepts either the plain password or its SHA-256 hex digest.
+The **App ID** is mandatory for the token call (`/account/token?appId=…`) — it is shown next to
+the App Secret in the developer portal's application page.
 
 For kiosk deployments the values can be baked in at build time (they still end up only in secure
 storage on first launch):
