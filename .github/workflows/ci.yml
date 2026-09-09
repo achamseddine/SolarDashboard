@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   analyze-test:
@@ -40,3 +41,30 @@ jobs:
         with:
           name: unicef-school-solar-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  # Publishes every successful push build as a GitHub Release so the APK has a
+  # permanent download link:
+  #   https://github.com/<owner>/<repo>/releases/latest/download/unicef-school-solar.apk
+  release:
+    runs-on: ubuntu-latest
+    needs: build-apk
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: unicef-school-solar-apk
+          path: dist
+      - name: Create release with the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v1.0.0-build.${{ github.run_number }}"
+          mv dist/app-release.apk dist/unicef-school-solar.apk
+          sha256sum dist/unicef-school-solar.apk > dist/unicef-school-solar.apk.sha256
+          gh release create "$tag" dist/unicef-school-solar.apk dist/unicef-school-solar.apk.sha256 \
+            --target "${{ github.sha }}" \
+            --title "UNICEF School Solar $tag" \
+            --notes "Release APK built by CI from commit ${{ github.sha }} on branch ${{ github.ref_name }}. Install on an Android 7.0+ tablet (allow installs from unknown sources)."
