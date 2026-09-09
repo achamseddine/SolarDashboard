@@ -23,7 +23,6 @@ dependencies:
   # Local database
   sqflite: ^2.4.3
   sqflite_common_ffi: ^2.4.2
-  sqlite3_flutter_libs: ^0.5.0
   path_provider: ^2.1.6
   path: ^1.9.1
 

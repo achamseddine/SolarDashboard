@@ -38,6 +38,30 @@ flutter run -d <tablet>      # or: flutter run -d linux
 flutter build apk --release  # Android tablet package
 ```
 
+Notes:
+* Windows desktop builds need `sqlite3.dll` next to the executable (or add the
+  `sqlite3_flutter_libs` package, which downloads SQLite at build time). Linux uses the system
+  `libsqlite3`; Android uses the bundled sqflite plugin.
+* If Material icons ever render as boxes after an incremental build, run `flutter clean` first (the
+  icon-font subset is regenerated on a clean build) or pass `--no-tree-shake-icons`.
+* The CI workflow in `.github/workflows/ci.yml` runs analyzer + tests and uploads a release APK.
+
+## Screenshots (demo mode, Linux desktop build)
+
+| Dashboard | Schools |
+|-----------|---------|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Schools](docs/screenshots/schools.png) |
+
+| School detail | Alarms |
+|---------------|--------|
+| ![School detail](docs/screenshots/school_detail.png) | ![Alarms](docs/screenshots/alarms.png) |
+
+| Map | Settings |
+|-----|----------|
+| ![Map](docs/screenshots/map.png) | ![Settings](docs/screenshots/settings.png) |
+
+More: `docs/screenshots/` (generated with `scripts/screenshots.sh`).
+
 ### Credentials
 
 The app needs a DeyeCloud **developer application** (App ID + App Secret from

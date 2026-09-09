@@ -222,25 +222,27 @@ class StationDao {
 
   // --------------------------------------------------------------- snapshots
 
-  /// Stores snapshots; duplicates on (station_id, ts) are ignored.
-  /// Returns the number of rows written.
+  /// Stores snapshots keyed on (station_id, ts). Rich sources (`station`,
+  /// `device`) replace an existing row at the same timestamp so the
+  /// opportunistic `list` values or a `history` frame never hide the full
+  /// power flow; `list`/`history` rows never overwrite. Returns rows written.
   Future<int> insertSnapshots(List<StationSnapshot> snaps) async {
     if (snaps.isEmpty) return 0;
     var written = 0;
     for (final chunk in chunked(snaps, 500)) {
       await db.transaction((txn) async {
-        final keys = <String>{};
-        for (final s in chunk) {
-          keys.add('${s.stationId}:${s.ts}');
-        }
         final batch = txn.batch();
         final seen = <String>{};
+        var ops = 0;
         for (final s in chunk) {
           if (s.isEmpty) continue;
           final k = '${s.stationId}:${s.ts}';
           if (!seen.add(k)) continue;
-          batch.insert('station_snapshots', s.toRow(), conflictAlgorithm: ConflictAlgorithm.ignore);
+          final rich = s.source == SnapshotSource.station || s.source == SnapshotSource.device || s.source == SnapshotSource.demo;
+          batch.insert('station_snapshots', s.toRow(), conflictAlgorithm: rich ? ConflictAlgorithm.replace : ConflictAlgorithm.ignore);
+          ops++;
         }
+        if (ops == 0) return;
         final results = await batch.commit(continueOnError: true);
         for (final r in results) {
           if (r is int && r > 0) written++;

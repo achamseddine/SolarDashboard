@@ -20,7 +20,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c "
   xdotool mousemove 700 500; for i in 1 2 3; do xdotool click 5; done; shot dashboard_2
   for i in 1 2 3 4 5 6; do xdotool click 5; done; shot dashboard_3
   xdotool mousemove 95 194 click 1; shot schools
-  xdotool mousemove 500 240 click 1; shot school_detail
+  xdotool mousemove 500 330 click 1; shot school_detail
   xdotool mousemove 700 500; for i in 1 2 3 4; do xdotool click 5; done; shot school_detail_2
   xdotool mousemove 95 238 click 1; shot alarms
   xdotool mousemove 95 282 click 1; sleep 3; shot map

@@ -44,6 +44,14 @@ void main() {
     expect(stations.map((s) => s.status).toSet(), containsAll([StationStatus.online]));
     expect(stations.any((s) => s.status == StationStatus.offline || s.status == StationStatus.stale), isTrue);
 
+    // The device/station snapshot must not be hidden by the list snapshot at the same timestamp.
+    final latestSnaps = await db.stations.allLatest();
+    final first = latestSnaps.values.firstWhere((l) => l.snapshot?.consumptionW != null);
+    final stored = await db.stations.latestSnapshot(first.stationId);
+    expect(stored?.consumptionW, isNotNull, reason: 'snapshot row keeps consumption');
+    final buckets = await db.stations.bucketsBetween(0, 1 << 40);
+    expect(buckets.where((b) => b.region.isEmpty).any((b) => b.consumptionW > 1000), isTrue, reason: 'fleet bucket sums consumption over all plants');
+
     final insights = await FleetInsightsBuilder(db).build(settings);
     expect(insights.totalStations, 30);
     expect(insights.reportingStations, greaterThan(20));
