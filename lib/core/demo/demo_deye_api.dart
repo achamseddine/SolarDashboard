@@ -43,7 +43,7 @@ class DemoDeyeApi implements DeyeApi {
   @override
   Future<Map<String, Object?>> accountInfo() async {
     await _tick();
-    return {'code': '1000000', 'success': true, 'email': 'demo@unicef.org', 'orgInfoList': [{'companyId': 10377168, 'companyName': 'UNICEF Lebanon (demo)'}]};
+    return {'code': '1000000', 'success': true, 'email': 'demo@unicef.org', 'orgInfoList': [{'companyId': 1000001, 'companyName': 'UNICEF Lebanon (demo)'}]};
   }
 
   @override

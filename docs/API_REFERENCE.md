@@ -29,7 +29,7 @@ Every response is a JSON envelope:
 `POST /account/token?appId={appId}`
 
 ```json
-{ "appSecret": "...", "email": "user@org", "password": "<sha256 hex, lowercase>", "companyId": "10377168" }
+{ "appSecret": "...", "email": "user@org", "password": "<sha256 hex, lowercase>", "companyId": "<company id from /account/info>" }
 ```
 
 * `password` is the **SHA-256 hex digest** of the DeyeCloud password (the app accepts either a plain
