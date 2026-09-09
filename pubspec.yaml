@@ -1,0 +1,56 @@
+name: unicef_solar_monitor
+description: "UNICEF Lebanon school solar fleet monitor - reads DeyeCloud plant/device/alarm data, stores it in local SQLite and renders a real-time tablet dashboard."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management & routing
+  flutter_riverpod: ^3.4.3
+  go_router: ^18.0.1
+
+  # Networking
+  dio: ^5.11.1
+  crypto: ^3.0.7
+
+  # Local database
+  sqflite: ^2.4.3
+  sqflite_common_ffi: ^2.4.2
+  path_provider: ^2.1.6
+  path: ^1.9.1
+
+  # Secure credential storage & preferences
+  flutter_secure_storage: ^11.0.0
+  shared_preferences: ^2.5.5
+
+  # Charts & map
+  fl_chart: ^1.2.0
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+
+  # Utilities
+  intl: ^0.20.3
+  collection: ^1.19.1
+  csv: ^8.0.0
+  share_plus: ^13.3.0
+  wakelock_plus: ^1.8.0
+  url_launcher: ^6.3.2
+  timezone: ^0.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.5
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/geo/lebanon_governorates.geojson
+    - assets/geo/lebanon_districts.geojson

@@ -1,0 +1,126 @@
+# UI specification — tablet dashboard
+
+Target: 10–13" Android tablets in landscape (1280×800 up to 2560×1600), also usable on Linux/Windows
+desktops. Material 3, `flutter_riverpod` 3, `go_router`, `fl_chart`, `flutter_map`. Everything reads
+from Riverpod providers in `lib/core/providers.dart`; **screens never call the API or the DB directly**
+except through those providers (the only on-demand network call is `SyncEngine.refreshStation`).
+
+## Shared building blocks (already implemented — reuse, don't duplicate)
+
+* `lib/features/common/widgets.dart` — `SectionCard`, `KpiTile`, `StatusChip`, `DeviceStatusChip`,
+  `LevelChip`, `LegendItem`, `AsyncView`, `EmptyState`, `ErrorState`, `TileGrid`, `TwoColumn`,
+  `InfoRow`, `PageHeader`, `kPagePadding`, `kGap`.
+* `lib/features/common/charts.dart` — `PowerLineChart` (multi-series W over time with legend + tooltip),
+  `EnergyBarChart` (daily/monthly kWh, grouped or stacked, ≤ 24 px bars, 4 px rounded caps),
+  `SocHistogram`, `DonutChart` (part-to-whole ≤ 6 slices, with centre figure), `SparkLine`,
+  `HorizontalBars` (ranking / region comparison, single hue), `ChartTable` (table twin of any chart).
+* `lib/core/theme.dart` — `AppColors` (validated palette: `pv`, `load`, `battery`, `gridImport`,
+  `gridExport`, status colours, `socRamp`, `sequential`), `buildTheme()`.
+* `lib/core/utils/format.dart` — `Fmt.power/energy/capacity/percent/ratio/co2/litres/ago/dateTime/…`.
+* `lib/features/shell/` — `AppShell` (NavigationRail), `SyncStatusBar`.
+
+## Data available
+
+* `fleetInsightsProvider` → `FleetInsights` (see `lib/core/models/fleet_insights.dart`): counts, live
+  totals over reporting plants, SOC median/histogram, energy today/7d/30d/lifetime, daily + monthly
+  series, regions, alarms summary, availability/outages/MTTR, data-age histogram, per-station
+  `StationInsight` list with yields, peer median, performance ratio, availability, outage, SOC, alarms.
+* `stationDetailProvider(id)` → `StationDetail`: station, latest, devices + `DeviceLatest` map,
+  today/yesterday frames, 30-day daily, 12-month monthly, alerts, battery days, status events, insight.
+* `alertsProvider(AlertFilter)` → `List<SolarAlert>`; `powerBucketsProvider((region, hours))` →
+  fleet/region 15-min `PowerBucket`s; `syncStatusProvider`, `syncLogsProvider`, `dbStatsProvider`,
+  `settingsProvider`, `credentialsProvider`, `canSyncProvider`, `appLogProvider`, `syncEngineProvider`.
+
+## Screens
+
+### Dashboard (`/dashboard`)
+Country-level view for a UNICEF energy officer. Order top → bottom:
+1. Header: "School solar fleet — Lebanon", subtitle with `generatedAt`, "now" data range
+   (`Fmt.time(dataTsMin)–Fmt.time(dataTsMax)`), reporting plants "n of N".
+2. KPI row (stat tiles, `TileGrid`): Schools (total, with online/offline/alarm/stale breakdown hint),
+   Generation now (Σ kW, hint "x % of y kWp reporting"), Consumption now, Grid import now / export now,
+   Battery (median SOC, charge/discharge), Today's generation (kWh, "as of HH:MM"), Self-sufficiency
+   (today, 7 d), CO₂ avoided 30 d (+ diesel litres), Availability 7 d, Active alarms (by level).
+3. Two-column: **Fleet power today** (`PowerLineChart` from `powerBucketsProvider(('', 24))`: PV,
+   load, import, export; battery as separate small chart or omitted; legend; tooltip) |
+   **Status donut** (`DonutChart` of status counts, tap → `/stations?status=`) + data-age histogram
+   (`HorizontalBars`).
+4. **Energy last 30 days** (`EnergyBarChart` generation vs consumption vs import, daily) and
+   **12 months** (`EnergyBarChart` monthly).
+5. **Governorates** table (`DataTable`): schools, online %, availability 7 d, kWp, generation now,
+   today kWh, median yield 7 d, self-sufficiency 7 d, alarms; row tap → `/stations?region=`.
+6. Attention lists side by side (each a `SectionCard` with ≤ 8 rows and "See all" →):
+   **Offline / stale** sorted by outage duration; **Under-performers** (performance ratio < 0.5, show
+   yield vs peer median); **Low battery** (< 20 %); **Critical alarms**.
+7. **Rankings**: top 10 / bottom 10 by 7-day specific yield (`HorizontalBars`, kWh/kWp/day, single hue,
+   label completeness < 80 % with a warning icon).
+8. **Battery health**: SOC histogram (`SocHistogram`), plants with hours below 20 % today.
+9. **Alarms**: active by level, new alarms per day (14 d) bars, top alarm names, most-alarming schools.
+10. **Environmental** card: CO₂/diesel today · 30 d · lifetime with the formula and factors in an
+    info tooltip ("self-consumed generation × factor").
+Every card's numbers must handle null → "–" / "n/a"; use `Fmt`. Pull-to-refresh / refresh button calls
+`syncEngineProvider.syncNow()`.
+
+### Schools (`/stations`)
+Search field + filter chips row (region dropdown, status chips, "with alarms", "under-performing",
+"low SOC") + sort (name, status, generation now, SOC, today kWh, yield 7 d, availability, last update).
+`DataTable` (or `PaginatedDataTable`) with: status chip, name (+ governorate/caza), kWp, PV now, load
+now, SOC, today kWh, yield 7 d + perf ratio, availability 7 d, alarms, last data (`Fmt.ago`).
+Row tap → `/stations/:id`. Show counts "x of y schools". Honour `initialQuery/initialRegion/initialStatus`.
+CSV export button of the current rows (`csv` + `share_plus`; on desktop write to a temp file and share).
+
+### School detail (`/stations/:id`)
+On open call `ref.read(syncEngineProvider).refreshStation(id)` once. Layout:
+* Header: back button, name, status chip, governorate · caza · address, kWp, battery kWh, commissioned,
+  grid type, plant id, coordinates, "Refresh" and "Open in map" actions.
+* **Power flow** panel (custom painter or simple boxed diagram): PV → (load, battery, grid) with live
+  W values and arrows coloured by direction; SOC meter (same-ramp track); data timestamp + age.
+* KPI tiles: today generation/consumption/import/export, yield today so far, yield 7 d vs peer median,
+  self-sufficiency 7 d, availability 30 d, outages 30 d, hours below 20 % SOC today, grid hours today.
+* **Today** `PowerLineChart` (frames) with yesterday as gray context line (emphasis form).
+* **30-day energy** stacked/grouped `EnergyBarChart`; **12-month** chart; battery `SocHistogram`/30-day
+  SOC min-max band (line chart).
+* **Devices**: one card per device: type icon, model, serial, status, collection time, key readings
+  (`MeasureKeys` groups: PV strings, battery, grid, temperatures, daily counters) + "All readings" table.
+* **Alarms** for this plant (`LevelChip`, status, start/end, description, acknowledge).
+* **Status history**: timeline of status events (30 d) as horizontal coloured bars.
+
+### Alarms (`/alarms`)
+Filter row: status (active/recovered), level, source (cloud/derived), region, days (1/7/30/all),
+unacknowledged only, search. Summary tiles (active by level, open > 7 d, median time-to-recovery).
+List/table rows: level chip, school (tap → detail), device type/serial, name, description, started
+(`Fmt.dateTime` + ago), duration, status, acknowledge button; "Acknowledge all". Show a banner when
+`syncStatus.alertsUnsupportedReason != null` explaining cloud alarms are unavailable and derived alarms
+still work. Honour `initialStationId`.
+
+### Map (`/map`)
+`flutter_map` with OSM tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, userAgentPackageName
+`org.unicef.unicef_solar_monitor`), centred on Lebanon (33.85, 35.85, zoom 8). Draw governorate outlines
+from `boundariesProvider` (`GeoArea.outlines`) as thin polylines. Markers per plant coloured by status
+(cluster-free; ≤ 1500 simple circle markers is fine), size by kWp; tap → bottom sheet with key figures
+and "Open". Filter chips (status, region). Legend. Handle tile loading failures gracefully (tiles are
+optional; the outlines and markers must still render offline).
+
+### Settings (`/settings`)
+Sections: **DeyeCloud account** (App ID, App Secret, e-mail, password *or* SHA-256 hash — explain that
+either is accepted —, company id, region EU/US; "Test connection" runs `accountInfo()` and shows the
+result; save → `credentialsProvider.save`; note that credentials are stored in the device secure
+store), **Demo mode** switch, **Sync** (auto-sync, poll interval, station/latest interval, alarm
+intervals, concurrency, stale threshold, retention days, nightly backfill, "Sync now", "Clear all data"),
+**Display** (dark mode, keep screen on, CO₂ and diesel factors, school hours), **Advanced** (alert
+endpoint paths override), **Diagnostics** (sync log table, DB statistics, app log with copy button,
+app version). A first-run banner when `!canSync`.
+
+## Conventions
+
+* Tablet landscape first; every screen scrolls vertically only (wide tables inside horizontal
+  `SingleChildScrollView`). Minimum tap target 44 px.
+* Colours only from `AppColors`; status always with icon/label, never colour alone.
+* Charts: thin marks (2 px lines, ≤ 24 px bars), hairline solid grid, legend for ≥ 2 series, tooltips on
+  touch, no dual axes, no pies for close values, "table view" toggle via `ChartTable` where feasible.
+* Numbers via `Fmt`; times in device local zone (Asia/Beirut on the tablets).
+* Riverpod 3: `AsyncValue.value` (not `valueOrNull`), `ref.watch(x.select(...))` for tiles,
+  `autoDispose` families for detail screens.
+* No `print`; use `debugPrint` sparingly. Keep files < 600 lines: split widgets into
+  `lib/features/<feature>/widgets/`.
+* `flutter analyze` must be clean (no infos) and existing tests must keep passing.
