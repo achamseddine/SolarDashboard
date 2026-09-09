@@ -25,19 +25,24 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x800+0+0 +repage "$OUT/$1$SUFFIX.png"; }
   scroll() { xdotool mousemove 200 600; for i in $(seq 1 "$1"); do xdotool click 5; done; }
   # Navigation rail items (x=95 in the extended rail).
+  # Rail rows: dashboard 150, analytics 194, schools 238, alarms 282, map 326, settings 370.
   xdotool mousemove 95 150 click 1; shot dashboard
   scroll 4; shot dashboard_2
   scroll 6; shot dashboard_3
-  scroll 6; shot dashboard_4
-  scroll 8; shot dashboard_5
-  xdotool mousemove 95 194 click 1; shot schools
+  scroll 8; shot dashboard_4
+  xdotool mousemove 95 194 click 1; shot analytics
+  scroll 4; shot analytics_2
+  scroll 6; shot analytics_3
+  scroll 6; shot analytics_4
+  scroll 8; shot analytics_5
+  xdotool mousemove 95 238 click 1; shot schools
   xdotool mousemove 500 330 click 1; sleep 4; shot school_detail
   scroll 4; shot school_detail_2
   scroll 6; shot school_detail_3
   scroll 8; shot school_detail_4
-  xdotool mousemove 95 238 click 1; shot alarms
-  xdotool mousemove 95 282 click 1; sleep 4; shot map
-  xdotool mousemove 95 326 click 1; shot settings
+  xdotool mousemove 95 282 click 1; shot alarms
+  xdotool mousemove 95 326 click 1; sleep 4; shot map
+  xdotool mousemove 95 370 click 1; shot settings
   scroll 8; shot settings_2
   kill $APP
 '
