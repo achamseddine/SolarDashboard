@@ -8,12 +8,17 @@ import 'api/deye_api_client.dart';
 import 'db/app_database.dart';
 import 'demo/demo_deye_api.dart';
 import 'insights/fleet_insights_builder.dart';
+import 'insights/school_insights_builder.dart';
 import 'models/alert.dart';
 import 'models/credentials.dart';
 import 'models/device.dart';
 import 'models/fleet_insights.dart';
+import 'models/school.dart';
+import 'models/school_insights.dart';
 import 'models/station.dart';
 import 'models/sync.dart';
+import 'schools/school_dataset.dart';
+import 'schools/station_school_linker.dart';
 import 'settings/app_settings.dart';
 import 'settings/credential_store.dart';
 import 'sync/rate_limiter.dart';
@@ -30,6 +35,10 @@ final credentialStoreProvider = Provider<CredentialStore>((ref) => CredentialSto
 final boundariesProvider = Provider<LebanonBoundaries?>((ref) => null);
 final initialSettingsProvider = Provider<AppSettings>((ref) => const AppSettings());
 final initialCredentialsProvider = Provider<DeyeCredentials?>((ref) => null);
+
+/// Real solarised schools used to name/place the demo fleet (from the
+/// bundled dataset; empty when the asset is unavailable).
+final demoSeedsProvider = Provider<List<DemoSeed>>((ref) => const []);
 
 /// Log lines from the sync engine / API (shown in Settings → diagnostics).
 final appLogProvider = NotifierProvider<AppLog, List<String>>(AppLog.new);
@@ -99,7 +108,7 @@ final apiProvider = Provider<DeyeApi>((ref) {
   final creds = ref.watch(credentialsProvider);
   final log = ref.read(appLogProvider.notifier);
   if (demo || creds == null || !creds.isComplete) {
-    return DemoDeyeApi();
+    return DemoDeyeApi(seeds: ref.read(demoSeedsProvider));
   }
   return DeyeApiClient(
     credentials: creds,
@@ -161,6 +170,62 @@ final fleetInsightsProvider = FutureProvider<FleetInsights>((ref) async {
   ref.watch(dataVersionProvider(DataKind.all));
   final settings = ref.watch(settingsProvider);
   return FleetInsightsBuilder(ref.read(databaseProvider)).build(settings);
+});
+
+/// Programme insights: the school dataset joined with plant links and the
+/// live fleet. Rebuilt whenever the fleet insights or the dataset change.
+final schoolInsightsProvider = FutureProvider<SchoolInsights>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  final fleet = await ref.watch(fleetInsightsProvider.future);
+  final settings = ref.watch(settingsProvider);
+  return SchoolInsightsBuilder(ref.read(databaseProvider)).build(settings, fleet);
+});
+
+/// Station id → linked school (for list/map decorations).
+final linkedSchoolsProvider = FutureProvider<Map<int, School>>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  ref.watch(dataVersionProvider(DataKind.stations));
+  return ref.read(databaseProvider).schools.linkedSchools();
+});
+
+/// The school linked to one plant, with its equipment inventory.
+class SchoolProfile {
+  const SchoolProfile({required this.link, required this.school, required this.equipment, this.insight});
+  final StationSchoolLink link;
+  final School school;
+  final List<SchoolEquipment> equipment;
+  final SchoolInsight? insight;
+}
+
+final schoolProfileProvider = FutureProvider.autoDispose.family<SchoolProfile?, int>((ref, stationId) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  final db = ref.read(databaseProvider);
+  final link = await db.schools.linkForStation(stationId);
+  if (link == null) return null;
+  final school = await db.schools.getSchool(link.cerd);
+  if (school == null) return null;
+  final insights = await ref.watch(schoolInsightsProvider.future);
+  return SchoolProfile(link: link, school: school, equipment: await db.schools.equipmentFor(link.cerd), insight: insights.forCerd(link.cerd));
+});
+
+/// Dataset summary for the settings card.
+final schoolDatasetInfoProvider = FutureProvider.autoDispose<SchoolDatasetInfo>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  return SchoolDatasetImporter(ref.read(databaseProvider)).info();
+});
+
+/// Suggestions for the manual link picker of one plant.
+final linkSuggestionsProvider = FutureProvider.autoDispose.family<List<LinkCandidate>, (int, String)>((ref, arg) async {
+  final db = ref.read(databaseProvider);
+  final station = await db.stations.getStation(arg.$1);
+  if (station == null) return const [];
+  final query = arg.$2.trim();
+  if (query.isNotEmpty) {
+    final found = await db.schools.getSchools(search: query);
+    return [for (final s in found.take(12)) LinkCandidate(school: s, method: LinkMethod.manual, confidence: 1, nameScore: 1)];
+  }
+  final schools = await db.schools.getSchools();
+  return StationSchoolLinker(schools).suggestions(station);
 });
 
 /// Everything the station detail screen shows.

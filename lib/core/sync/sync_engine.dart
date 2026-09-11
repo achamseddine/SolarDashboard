@@ -9,6 +9,7 @@ import '../db/app_database.dart';
 import '../models/alert.dart';
 import '../models/device.dart';
 import '../models/station.dart';
+import '../schools/station_school_linker.dart';
 import '../models/sync.dart';
 import '../settings/app_settings.dart';
 import '../utils/app_time.dart';
@@ -258,7 +259,23 @@ class SyncEngine {
     await db.sync.metaSet('sync.first', '1');
     _emit(_status.copyWith(current: resolved.length, total: resolved.length, stationsSynced: resolved.length));
     db.notifyChanged(DataKind.stations);
+    await linkSchools();
     return resolved.length;
+  }
+
+  /// Matches plants to MEHE schools (CERD) using the bundled dataset. Manual
+  /// links are kept; failures never break the sweep.
+  Future<int> linkSchools() async {
+    try {
+      final schools = await db.schools.getSchools();
+      if (schools.isEmpty) return 0;
+      final n = await StationSchoolLinker(schools).linkAll(db, now: _now());
+      if (n > 0) log?.call('Linked $n plants to schools');
+      return n;
+    } catch (e) {
+      log?.call('School linking failed: ${_short(e)}');
+      return 0;
+    }
   }
 
   // ---------------------------------------------------------------- devices

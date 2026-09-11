@@ -12,6 +12,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'app.dart';
 import 'core/db/app_database.dart';
 import 'core/providers.dart';
+import 'core/schools/school_dataset.dart';
 import 'core/settings/app_settings.dart';
 import 'core/settings/credential_store.dart';
 import 'core/sync/station_region.dart';
@@ -36,6 +37,7 @@ Future<void> main() async {
   final store = CredentialStore();
   final credentials = await store.load();
   final boundaries = await loadBoundaries();
+  final seeds = await importSchoolDataset(db);
 
   runApp(ProviderScope(
     overrides: [
@@ -43,11 +45,26 @@ Future<void> main() async {
       sharedPrefsProvider.overrideWithValue(prefs),
       credentialStoreProvider.overrideWithValue(store),
       boundariesProvider.overrideWithValue(boundaries),
+      demoSeedsProvider.overrideWithValue(seeds),
       initialSettingsProvider.overrideWithValue(settings),
       initialCredentialsProvider.overrideWithValue(credentials),
     ],
     child: const SolarMonitorApp(),
   ));
+}
+
+/// Imports the bundled MEHE/UNICEF school dataset when its version changed
+/// and returns the demo seeds (real solarised schools). Never throws.
+Future<List<DemoSeed>> importSchoolDataset(AppDatabase db) async {
+  try {
+    final text = await rootBundle.loadString(SchoolDataset.assetPath);
+    final dataset = SchoolDataset.fromJson(text);
+    await SchoolDatasetImporter(db).importIfNeeded(dataset);
+    return dataset.demoSeeds;
+  } catch (e) {
+    debugPrint('School dataset unavailable: $e');
+    return const [];
+  }
 }
 
 /// Loads the bundled governorate/district polygons (null if unavailable).

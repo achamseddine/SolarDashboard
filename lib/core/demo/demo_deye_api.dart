@@ -6,15 +6,39 @@ import '../api/deye_api.dart';
 import '../models/alert.dart';
 import '../models/device.dart';
 import '../models/station.dart';
+import '../schools/school_dataset.dart';
 import '../utils/app_time.dart';
 
 /// Synthetic DeyeCloud for demos, screenshots and tests: ~60 Lebanese public
 /// schools with realistic PV / load / battery behaviour, a few faults, and
 /// history. Deterministic for a given [seed].
 class DemoDeyeApi implements DeyeApi {
-  DemoDeyeApi({int seed = 7, DateTime Function()? clock, this.latency = const Duration(milliseconds: 15), int schools = 60})
-      : _clock = clock ?? DateTime.now {
-    _schools = _buildSchools(math.Random(seed), schools);
+  /// [seeds] (real solarised schools from the bundled dataset) give the
+  /// synthetic plants real names, coordinates and sizes so the plant ↔ school
+  /// linking works in demo mode; without seeds, generic towns are used.
+  DemoDeyeApi({int seed = 7, DateTime Function()? clock, this.latency = const Duration(milliseconds: 15), int schools = 60, List<DemoSeed> seeds = const []})
+      : _clock = clock ?? DateTime.now,
+        seeds = List.unmodifiable(seeds) {
+    final picked = _pickSeeds(seeds, schools);
+    _schools = _buildSchools(math.Random(seed), schools, picked);
+    seedByStation = {for (var i = 0; i < picked.length; i++) 3000 + i: picked[i]};
+  }
+
+  /// Real schools the fleet was seeded from (empty for the generic fleet).
+  final List<DemoSeed> seeds;
+
+  /// Station id → the real school it impersonates (ground truth for tests).
+  late final Map<int, DemoSeed> seedByStation;
+
+  /// Spreads the seeded plants over the governorates: every k-th seed.
+  static List<DemoSeed> _pickSeeds(List<DemoSeed> seeds, int count) {
+    if (seeds.isEmpty) return const [];
+    final step = math.max(1, seeds.length ~/ count);
+    final picked = <DemoSeed>[];
+    for (var i = 0; i < seeds.length && picked.length < count; i += step) {
+      picked.add(seeds[i]);
+    }
+    return picked;
   }
 
   final DateTime Function() _clock;
@@ -330,20 +354,22 @@ class DemoDeyeApi implements DeyeApi {
 
   static const _schoolTypes = ['Public School', 'Public High School', 'Intermediate Public School', 'Mixed Public School', 'Technical Public School'];
 
-  static List<_School> _buildSchools(math.Random rnd, int count) {
+  static List<_School> _buildSchools(math.Random rnd, int count, List<DemoSeed> picked) {
     final out = <_School>[];
     for (var i = 0; i < count; i++) {
+      final seedSchool = i < picked.length ? picked[i] : null;
       final t = _towns[i % _towns.length];
-      final kwp = [8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 24.0, 30.0][rnd.nextInt(8)];
+      final kwp = seedSchool?.kwp ?? [8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 24.0, 30.0][rnd.nextInt(8)];
       final inverters = kwp > 12 ? 2 : 1;
-      final modules = (kwp / 4).round().clamp(2, 8);
+      final modules = seedSchool?.batteryKwh != null ? (seedSchool!.batteryKwh! / 5.12).round().clamp(1, 40) : (kwp / 4).round().clamp(2, 8);
       final fault = rnd.nextDouble();
+      final jitter = (rnd.nextDouble() - 0.5) * 0.0006; // ≈ ±30 m
       out.add(_School(
         id: 3000 + i,
-        name: '${_schoolTypes[rnd.nextInt(_schoolTypes.length)]} of ${t.$1}${i >= _towns.length ? ' ${i ~/ _towns.length + 1}' : ''}',
-        address: '${t.$1}, ${t.$2}, Lebanon',
-        lat: t.$3 + (rnd.nextDouble() - 0.5) * 0.01,
-        lng: t.$4 + (rnd.nextDouble() - 0.5) * 0.01,
+        name: seedSchool?.name ?? '${_schoolTypes[rnd.nextInt(_schoolTypes.length)]} of ${t.$1}${i >= _towns.length ? ' ${i ~/ _towns.length + 1}' : ''}',
+        address: seedSchool != null ? '${seedSchool.address}, Lebanon' : '${t.$1}, ${t.$2}, Lebanon',
+        lat: seedSchool?.lat != null ? seedSchool!.lat + jitter : t.$3 + (rnd.nextDouble() - 0.5) * 0.01,
+        lng: seedSchool?.lng != null ? seedSchool!.lng + jitter : t.$4 + (rnd.nextDouble() - 0.5) * 0.01,
         kwp: kwp,
         inverters: inverters,
         batteryModules: modules,

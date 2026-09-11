@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:unicef_solar_monitor/core/db/app_database.dart';
 import 'package:unicef_solar_monitor/core/demo/demo_deye_api.dart';
 import 'package:unicef_solar_monitor/core/providers.dart';
+import 'package:unicef_solar_monitor/core/schools/school_dataset.dart';
 import 'package:unicef_solar_monitor/core/settings/app_settings.dart';
 import 'package:unicef_solar_monitor/core/sync/sync_engine.dart';
 import 'package:unicef_solar_monitor/core/theme.dart';
@@ -28,13 +31,19 @@ class TestEnv {
   final AppSettings settings;
   final DemoDeyeApi api;
 
-  static Future<TestEnv> create({int schools = 20, bool sync = true, AppSettings? settings}) async {
+  static SchoolDataset? _dataset;
+
+  /// The bundled school dataset, read once from `assets/data/schools.json`.
+  static SchoolDataset get dataset => _dataset ??= SchoolDataset.fromJson(File(SchoolDataset.assetPath).readAsStringSync());
+
+  static Future<TestEnv> create({int schools = 20, bool sync = true, AppSettings? settings, bool withSchools = true}) async {
     sqfliteFfiInit();
     AppTime.ensureInitialised();
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final db = await AppDatabase.openInMemory(factory: databaseFactoryFfi);
-    final api = DemoDeyeApi(latency: Duration.zero, schools: schools);
+    if (withSchools) await SchoolDatasetImporter(db).importIfNeeded(dataset);
+    final api = DemoDeyeApi(latency: Duration.zero, schools: schools, seeds: withSchools ? dataset.demoSeeds : const []);
     final s = settings ?? const AppSettings(demoMode: true, maxConcurrentRequests: 8);
     if (sync) {
       final engine = SyncEngine(db: db, apiProvider: () => api, settingsProvider: () => s);
@@ -49,6 +58,7 @@ class TestEnv {
         sharedPrefsProvider.overrideWithValue(prefs),
         initialSettingsProvider.overrideWithValue(settings),
         apiProvider.overrideWithValue(api),
+        demoSeedsProvider.overrideWithValue(api.seeds),
       ];
 
   /// Wraps [child] in a ProviderScope + MaterialApp sized like a tablet.

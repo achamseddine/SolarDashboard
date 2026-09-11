@@ -5,11 +5,12 @@ import 'package:sqflite/sqflite.dart';
 import 'alert_dao.dart';
 import 'device_dao.dart';
 import 'retention.dart';
+import 'school_dao.dart';
 import 'station_dao.dart';
 import 'sync_dao.dart';
 
 /// Which part of the data changed — providers subscribe by kind.
-enum DataKind { stations, latest, devices, daily, alerts, buckets, all }
+enum DataKind { stations, latest, devices, daily, alerts, buckets, schools, all }
 
 /// Owns the SQLite connection and the DAOs. Use [AppDatabase.open] for a file
 /// database and [AppDatabase.openInMemory] in tests.
@@ -19,15 +20,18 @@ class AppDatabase {
         devices = DeviceDao(db),
         alerts = AlertDao(db),
         sync = SyncDao(db),
+        schools = SchoolDao(db),
         retention = Retention(db);
 
-  static const int schemaVersion = 1;
+  /// v1: plant/device/energy/alarm tables. v2: school dataset + links.
+  static const int schemaVersion = 2;
 
   final Database db;
   final StationDao stations;
   final DeviceDao devices;
   final AlertDao alerts;
   final SyncDao sync;
+  final SchoolDao schools;
   final Retention retention;
 
   final StreamController<Set<DataKind>> _changes = StreamController<Set<DataKind>>.broadcast();
@@ -81,7 +85,9 @@ class AppDatabase {
   }
 
   static Future<void> _upgrade(Database db, int from, int to) async {
-    // Future migrations go here (from < 2 → ..., etc.).
+    // Every version only adds tables/indexes (all CREATE IF NOT EXISTS), so
+    // re-running the schema script is the migration.
+    await createSchema(db);
   }
 
   static Future<void> createSchema(DatabaseExecutor db) async {
@@ -241,18 +247,90 @@ class AppDatabase {
         ok INTEGER, items INTEGER, message TEXT
       )''');
     await db.execute('CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT)');
+
+    // ---- v2: school dataset (bundled MEHE/UNICEF workbooks) + plant links
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS schools (
+        cerd INTEGER PRIMARY KEY,
+        in_master INTEGER NOT NULL DEFAULT 1,
+        name TEXT NOT NULL, name_ar TEXT,
+        region TEXT, caza TEXT, cadaster TEXT, cas_code INTEGER,
+        ownership TEXT, capacity INTEGER,
+        lat REAL, lng REAL, address TEXT, phone TEXT,
+        students_am INTEGER, students_pm INTEGER, enrollment INTEGER, pm_cerd INTEGER,
+        connected INTEGER NOT NULL DEFAULT 0
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_schools_region ON schools(region)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS school_solar (
+        cerd INTEGER PRIMARY KEY,
+        listed_name TEXT, status TEXT NOT NULL, status_raw TEXT,
+        donor TEXT, donor_group TEXT, project TEXT,
+        cost_usd REAL, kwp REAL, inverter_kw REAL, battery_kwh REAL,
+        enrollment_2324 INTEGER, qa_cost_usd REAL, led_cost_usd REAL,
+        shift TEXT, language TEXT, contractor TEXT, consultant TEXT
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_school_solar_status ON school_solar(status)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS school_loads (
+        cerd INTEGER PRIMARY KEY,
+        lighting_kwh REAL, hvac_kwh REAL, it_kwh REAL, misc_kwh REAL
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS school_equipment (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cerd INTEGER NOT NULL, type TEXT NOT NULL, category TEXT NOT NULL,
+        watts REAL, count INTEGER, hours_per_day REAL, annual_kwh REAL
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_school_equipment_cerd ON school_equipment(cerd)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS school_education (
+        cerd INTEGER PRIMARY KEY,
+        shift TEXT,
+        am_submitted INTEGER, am_attendance REAL, am_absence10 REAL,
+        pm_submitted INTEGER, pm_attendance REAL, pm_absence10 REAL,
+        am_risk TEXT, pm_risk TEXT,
+        pm_teachers INTEGER, pm_teacher_terms_json TEXT, student_teacher_ratio REAL,
+        visited_third_party INTEGER, pm_teacher_risk TEXT,
+        pm_female_teachers INTEGER, pm_male_teachers INTEGER, teaching_days INTEGER,
+        visited_by_bdo INTEGER,
+        monthly_student_risk_json TEXT, monthly_teacher_risk_json TEXT
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS station_school_links (
+        station_id INTEGER PRIMARY KEY,
+        cerd INTEGER NOT NULL,
+        method TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_links_cerd ON station_school_links(cerd)');
   }
 
+  /// Tables filled by synchronisation (cleared by [clearAllData]).
   static const List<String> tables = [
     'stations', 'station_latest', 'devices', 'device_latest', 'device_samples', 'station_snapshots',
     'station_daily', 'station_monthly', 'station_battery_daily', 'power_buckets', 'station_status_events',
     'alerts', 'sync_log', 'sync_meta',
   ];
 
+  /// Tables filled from the bundled school dataset (kept by [clearAllData];
+  /// re-imported from the asset when its version changes).
+  static const List<String> datasetTables = ['schools', 'school_solar', 'school_loads', 'school_equipment', 'school_education'];
+
+  /// Plant ↔ school links: derived from synced plants but kept across
+  /// [clearAllData] so manual links survive a re-sync.
+  static const String linksTable = 'station_school_links';
+
   /// Row counts per table (Settings → database statistics).
   Future<Map<String, int>> tableCounts() async {
     final out = <String, int>{};
-    for (final t in tables) {
+    for (final t in [...tables, ...datasetTables, linksTable]) {
       out[t] = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $t')) ?? 0;
     }
     return out;
@@ -269,11 +347,18 @@ class AppDatabase {
     }
   }
 
-  /// Deletes all synced data (keeps settings). Used when switching accounts.
+  /// Deletes all synced data (keeps settings, the school dataset and
+  /// plant ↔ school links). Used when switching accounts.
   Future<void> clearAllData() async {
+    // The dataset version lives in sync_meta; keep it so the asset is not
+    // re-imported needlessly.
+    final datasetMeta = await db.query('sync_meta', where: "key LIKE 'schools.%'");
     await db.transaction((txn) async {
       for (final t in tables) {
         await txn.delete(t);
+      }
+      for (final row in datasetMeta) {
+        await txn.insert('sync_meta', row, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
     notifyChanged(DataKind.all);

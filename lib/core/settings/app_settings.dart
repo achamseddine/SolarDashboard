@@ -11,6 +11,7 @@ class AppSettings {
     this.keepScreenOn = true,
     this.co2FactorKgPerKwh = 0.70,
     this.dieselLitresPerKwh = 0.27,
+    this.specificYieldKwhPerKwp = 1500,
     this.schoolDayStartHour = 8,
     this.schoolDayEndHour = 14,
     this.darkMode = false,
@@ -37,6 +38,10 @@ class AppSettings {
 
   /// Litres of diesel a generator burns per kWh (typical 0.25–0.30).
   final double dieselLitresPerKwh;
+
+  /// Expected annual PV yield in Lebanon (kWh per kWp per year), used to
+  /// compare installed capacity with the audited school loads.
+  final double specificYieldKwhPerKwp;
   final int schoolDayStartHour;
   final int schoolDayEndHour;
   final bool darkMode;
@@ -75,6 +80,7 @@ class AppSettings {
     bool? keepScreenOn,
     double? co2FactorKgPerKwh,
     double? dieselLitresPerKwh,
+    double? specificYieldKwhPerKwp,
     int? schoolDayStartHour,
     int? schoolDayEndHour,
     bool? darkMode,
@@ -97,6 +103,7 @@ class AppSettings {
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
         co2FactorKgPerKwh: co2FactorKgPerKwh ?? this.co2FactorKgPerKwh,
         dieselLitresPerKwh: dieselLitresPerKwh ?? this.dieselLitresPerKwh,
+        specificYieldKwhPerKwp: specificYieldKwhPerKwp ?? this.specificYieldKwhPerKwp,
         schoolDayStartHour: schoolDayStartHour ?? this.schoolDayStartHour,
         schoolDayEndHour: schoolDayEndHour ?? this.schoolDayEndHour,
         darkMode: darkMode ?? this.darkMode,
@@ -123,6 +130,7 @@ class AppSettings {
       keepScreenOn: prefs.getBool('${_prefix}keepScreenOn') ?? d.keepScreenOn,
       co2FactorKgPerKwh: prefs.getDouble('${_prefix}co2FactorKgPerKwh') ?? d.co2FactorKgPerKwh,
       dieselLitresPerKwh: prefs.getDouble('${_prefix}dieselLitresPerKwh') ?? d.dieselLitresPerKwh,
+      specificYieldKwhPerKwp: prefs.getDouble('${_prefix}specificYieldKwhPerKwp') ?? d.specificYieldKwhPerKwp,
       schoolDayStartHour: prefs.getInt('${_prefix}schoolDayStartHour') ?? d.schoolDayStartHour,
       schoolDayEndHour: prefs.getInt('${_prefix}schoolDayEndHour') ?? d.schoolDayEndHour,
       darkMode: prefs.getBool('${_prefix}darkMode') ?? d.darkMode,
@@ -146,6 +154,7 @@ class AppSettings {
     await prefs.setBool('${_prefix}keepScreenOn', keepScreenOn);
     await prefs.setDouble('${_prefix}co2FactorKgPerKwh', co2FactorKgPerKwh);
     await prefs.setDouble('${_prefix}dieselLitresPerKwh', dieselLitresPerKwh);
+    await prefs.setDouble('${_prefix}specificYieldKwhPerKwp', specificYieldKwhPerKwp);
     await prefs.setInt('${_prefix}schoolDayStartHour', schoolDayStartHour);
     await prefs.setInt('${_prefix}schoolDayEndHour', schoolDayEndHour);
     await prefs.setBool('${_prefix}darkMode', darkMode);

@@ -55,3 +55,4 @@ flutter:
   assets:
     - assets/geo/lebanon_governorates.geojson
     - assets/geo/lebanon_districts.geojson
+    - assets/data/schools.json
