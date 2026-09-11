@@ -22,7 +22,7 @@ class ProgrammeKpiGrid extends StatelessWidget {
     final noPlants = d.monitored == 0;
     return TileGrid(
       minTileWidth: 200,
-      tileHeight: 96,
+      tileHeight: 114,
       children: [
         KpiTile(
           label: 'Public schools',

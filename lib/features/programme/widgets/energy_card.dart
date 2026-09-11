@@ -36,7 +36,9 @@ class EnergyAuditCard extends StatelessWidget {
     // The donut legend prints whole numbers: show MWh once the audit runs into
     // the millions of kWh so the labels stay short.
     final inMwh = total >= 1e6;
-    final donutSlices = [for (final s in slices) (s.$1, inMwh ? s.$2 / 1e3 : s.$2, s.$3)];
+    final unit = inMwh ? 'MWh' : 'kWh';
+    final donutSlices = [for (final s in slices) ('${s.$1} ($unit)', inMwh ? s.$2 / 1e3 : s.$2, s.$3)];
+    final centre = energyCompact(total).split(' ');
     final noMeasured = d.measuredSchools == 0;
     final sizing = d.fleetSizingRatio;
     final led = d.ledShare;
@@ -53,7 +55,7 @@ class EnergyAuditCard extends StatelessWidget {
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DonutChart(size: 170, slices: donutSlices, centerValue: energyCompact(total), centerLabel: 'per year'),
+                      DonutChart(size: 170, slices: donutSlices, centerValue: centre.first, centerLabel: '${centre.last} per year'),
                       MutedNote('Audited load by category, ${inMwh ? 'MWh' : 'kWh'}/year.'),
                     ],
                   )
@@ -65,13 +67,13 @@ class EnergyAuditCard extends StatelessWidget {
                 FactTile(label: 'Solarised audited load', value: Fmt.energy(d.solarizedLoadKwh), hint: '${Fmt.int_(d.solarizedAuditCount)} solarised schools audited'),
                 FactTile(label: 'Expected generation', value: Fmt.energy(d.expectedGenKwh), hint: '${Fmt.capacity(d.installedKwp)} × ${Fmt.int_(d.specificYieldKwhPerKwp)} kWh/kWp/yr', color: p.pv),
                 FactTile(
-                  label: 'Measured generation · 30 d',
+                  label: 'Measured PV, 30 d',
                   value: noMeasured ? '–' : Fmt.energy(d.measuredGenKwh30d),
                   hint: noMeasured ? 'No monitored plant yet' : '${Fmt.int_(d.measuredSchools)} monitored schools',
                   color: noMeasured ? null : p.pv,
                 ),
                 FactTile(
-                  label: 'Measured consumption · 30 d',
+                  label: 'Measured load, 30 d',
                   value: noMeasured ? '–' : Fmt.energy(d.measuredConsKwh30d),
                   hint: noMeasured ? 'No monitored plant yet' : 'same ${Fmt.int_(d.measuredSchools)} schools',
                   color: noMeasured ? null : p.load,
@@ -117,7 +119,7 @@ class EnergyAuditCard extends StatelessWidget {
             ChartTable(
               maxHeight: 280,
               columns: const ['Equipment', 'Category', 'Items', 'kWh/year'],
-              rows: [for (final e in top) [e.type, e.category, Fmt.int_(e.items), Fmt.int_(e.annualKwh)]],
+              rows: [for (final e in top) [_capitalise(e.type), e.category, Fmt.int_(e.items), Fmt.int_(e.annualKwh)]],
             ),
           const MutedNote('Expected generation = installed kWp × specific yield (Settings, default 1,500 kWh/kWp/yr). Audited loads are MEHE energy-audit estimates; measured figures come from the linked DeyeCloud plants over the last 30 days.'),
         ],
@@ -155,3 +157,5 @@ class _Meter extends StatelessWidget {
     );
   }
 }
+
+String _capitalise(String v) => v.isEmpty ? v : v[0].toUpperCase() + v.substring(1);

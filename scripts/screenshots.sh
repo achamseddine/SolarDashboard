@@ -22,7 +22,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   eval "$LAUNCH" > /tmp/app_screens.log 2>&1 &
   APP=$!
   sleep 45
-  shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x800+0+0 +repage "$OUT/$1$SUFFIX.png"; }
+  shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x720+0+0 +repage "$OUT/$1$SUFFIX.png"; }
   scroll() { xdotool mousemove 200 600; for i in $(seq 1 "$1"); do xdotool click 5; done; }
   # Navigation rail items (x=95 in the extended rail).
   # Rail rows: dashboard 150, analytics 194, programme 238, schools 282, alarms 326, map 370, settings 414.
@@ -39,7 +39,9 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 5; shot programme_2
   scroll 6; shot programme_3
   scroll 6; shot programme_4
-  scroll 8; shot programme_5
+  scroll 6; shot programme_5
+  scroll 6; shot programme_6
+  scroll 8; shot programme_7
   xdotool mousemove 95 282 click 1; shot schools
   xdotool mousemove 500 330 click 1; sleep 4; shot school_detail
   scroll 4; shot school_detail_2
@@ -48,6 +50,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 8; shot school_detail_5
   xdotool mousemove 95 326 click 1; shot alarms
   xdotool mousemove 95 370 click 1; sleep 4; shot map
+  xdotool mousemove 305 102 click 1; sleep 4; shot map_schools
   xdotool mousemove 95 414 click 1; shot settings
   scroll 8; shot settings_2
   kill $APP

@@ -40,7 +40,7 @@ class CoverageByRegionCard extends StatelessWidget {
                     groups: [
                       for (final r in regions)
                         BarGroup(
-                          label: r.name,
+                          label: shortRegion(r.name),
                           fullLabel: '${r.name} · ${Fmt.int_(r.schools)} schools',
                           values: [r.solarized.toDouble(), r.pipeline.toDouble(), math.max(0, r.notSolarized).toDouble()],
                         ),
@@ -74,3 +74,12 @@ class CoverageByRegionCard extends StatelessWidget {
     );
   }
 }
+
+/// Axis-friendly governorate names (full names stay in the tooltips).
+String shortRegion(String name) => switch (name) {
+      'Mount Lebanon' => 'Mt Lebanon',
+      'Keserwan-Jbeil' => 'Kes.-Jbeil',
+      'Baalbek-Hermel' => 'Baalbek-H.',
+      'Unassigned' => 'Unassigned',
+      _ => name,
+    };

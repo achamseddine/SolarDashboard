@@ -35,7 +35,7 @@ class ProgrammeStrip extends ConsumerWidget {
                 KpiTile(dense: true, label: 'Public schools', value: Fmt.int_(d.publicSchools), hint: '${Fmt.int_(d.students)} students', icon: Icons.school_outlined, onTap: () => goTo(context, '/programme')),
                 KpiTile(dense: true, label: 'Solarised', value: Fmt.int_(d.solarized), hint: '${Fmt.ratio(d.solarizedShare)} of public schools', icon: Icons.wb_sunny_outlined, color: AppColors.pv, onTap: () => goTo(context, '/programme')),
                 KpiTile(dense: true, label: 'Connected', value: Fmt.int_(d.connected), hint: '${Fmt.ratio(d.connectedShare)} · ${Fmt.int_(d.solarizedConnected)} solar + internet', icon: Icons.wifi, color: AppColors.unicefCyan, onTap: () => goTo(context, '/programme')),
-                KpiTile(dense: true, label: 'Monitored plants', value: Fmt.int_(d.monitored), hint: '${Fmt.int_(d.solarizedUnmonitored)} solarised without a plant', icon: Icons.link, color: AppColors.battery, onTap: () => goTo(context, '/programme')),
+                KpiTile(dense: true, label: 'Monitored plants', value: Fmt.int_(d.monitored), hint: '${Fmt.int_(d.solarizedUnmonitored)} solarised, no plant', icon: Icons.link, color: AppColors.battery, onTap: () => goTo(context, '/programme')),
               ],
             ),
             const SizedBox(height: 10),
