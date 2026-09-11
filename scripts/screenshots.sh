@@ -41,7 +41,9 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 6; shot programme_4
   scroll 6; shot programme_5
   scroll 6; shot programme_6
-  scroll 8; shot programme_7
+  scroll 6; shot programme_7
+  scroll 6; shot programme_8
+  scroll 8; shot programme_9
   xdotool mousemove 95 282 click 1; shot schools
   xdotool mousemove 500 330 click 1; sleep 4; shot school_detail
   scroll 4; shot school_detail_2
