@@ -17,19 +17,48 @@ void main() {
     await TestEnv.settle(tester, rounds: 2);
     expect(find.text('DeyeCloud account'), findsOneWidget);
     expect(find.text('Demo mode'), findsOneWidget);
-    expect(find.text('Synchronisation'), findsOneWidget);
     expect(find.text('Test connection'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    // Cards below the fold are built lazily: scroll until each one appears.
     final list = find.byType(ListView).first;
-    await tester.drag(list, const Offset(0, -800));
-    await tester.pump(const Duration(milliseconds: 300));
+    Future<void> scrollTo(Finder f) async {
+      for (var i = 0; i < 12 && f.evaluate().isEmpty; i++) {
+        await tester.drag(list, const Offset(0, -400));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(f, findsOneWidget);
+    }
+
+    await scrollTo(find.text('Synchronisation'));
     final dark = find.widgetWithText(SwitchListTile, 'Dark mode');
-    expect(dark, findsOneWidget);
+    await scrollTo(dark);
     await tester.tap(dark);
     await TestEnv.settle(tester, rounds: 1);
     expect(env.prefs.getBool('settings.darkMode'), isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('settings shows the school dataset card and re-links plants', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final env = await TestEnv.createFor(tester, schools: 5);
+    addTearDown(() => tester.runAsync(env.dispose));
+
+    await tester.pumpWidget(env.wrap(const SettingsScreen()));
+    await TestEnv.settle(tester, rounds: 3);
+    expect(find.text('School dataset'), findsOneWidget);
+    expect(find.text('Solarised'), findsOneWidget);
+    expect(find.textContaining('1,2'), findsWidgets); // 1,246 schools in the bundled dataset
+    expect(find.textContaining('by hand'), findsOneWidget);
+    final relink = find.widgetWithText(OutlinedButton, 'Re-link plants');
+    expect(relink, findsOneWidget);
+    await tester.tap(relink);
+    await TestEnv.settle(tester, rounds: 2);
+    expect(find.textContaining('plants linked to school records'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await TestEnv.drain(tester);
   });
 
   test('password normalisation accepts plain text and hex digests', () {

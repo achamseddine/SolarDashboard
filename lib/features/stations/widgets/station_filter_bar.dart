@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/models/school.dart';
 import '../../../core/models/station.dart';
 import '../../../core/theme.dart';
 import '../station_filters.dart';
 
 /// Search field, region dropdown, status chips, quick filters and sort menu.
 class StationFilterBar extends StatelessWidget {
-  const StationFilterBar({super.key, required this.filter, required this.onChanged, required this.searchController, this.regionCounts = const {}});
+  const StationFilterBar({super.key, required this.filter, required this.onChanged, required this.searchController, this.regionCounts = const {}, this.schools = const {}});
 
   final StationFilter filter;
   final ValueChanged<StationFilter> onChanged;
@@ -15,9 +16,14 @@ class StationFilterBar extends StatelessWidget {
   /// Stations per region (for the dropdown labels).
   final Map<String, int> regionCounts;
 
+  /// Station id → linked MEHE school (for the chip tooltips).
+  final Map<int, School> schools;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final linkedCount = schools.length;
+    final connectedCount = schools.values.where((s) => s.connected).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -31,7 +37,7 @@ class StationFilterBar extends StatelessWidget {
                 decoration: InputDecoration(
                   isDense: true,
                   prefixIcon: const Icon(Icons.search),
-                  hintText: 'Search school, address, caza…',
+                  hintText: 'Search school, CERD, address, caza…',
                   border: const OutlineInputBorder(),
                   suffixIcon: filter.query.isEmpty
                       ? null
@@ -109,6 +115,20 @@ class StationFilterBar extends StatelessWidget {
               tooltip: 'Battery below 20 %',
               selected: filter.lowSoc,
               onSelected: (on) => onChanged(filter.copyWith(lowSoc: on)),
+            ),
+            FilterChip(
+              avatar: Icon(Icons.wifi, size: 16, color: filter.connected == true ? AppColors.good : null),
+              label: const Text('Connected'),
+              tooltip: '$connectedCount plants at schools on the MEHE/UNICEF internet-connectivity roll-out',
+              selected: filter.connected == true,
+              onSelected: (on) => onChanged(on ? filter.copyWith(connected: true) : filter.copyWith(clearConnected: true)),
+            ),
+            FilterChip(
+              avatar: const Icon(Icons.school_outlined, size: 16),
+              label: const Text('Linked to school'),
+              tooltip: '$linkedCount plants matched to a MEHE public-school record (by name and coordinates, or set by hand)',
+              selected: filter.linked == true,
+              onSelected: (on) => onChanged(on ? filter.copyWith(linked: true) : filter.copyWith(clearLinked: true)),
             ),
           ],
         ),

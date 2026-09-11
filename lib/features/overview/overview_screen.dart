@@ -9,6 +9,7 @@ import '../common/widgets.dart';
 import '../dashboard/widgets/dashboard_common.dart';
 import 'widgets/hero_cards.dart';
 import 'widgets/overview_cards.dart';
+import 'widgets/programme_strip.dart';
 
 /// Landing page: fleet-wide generation, consumption and carbon footprint.
 class OverviewScreen extends ConsumerWidget {
@@ -62,6 +63,7 @@ class _Overview extends ConsumerWidget {
             onConsumption: () => goTo(context, '/analytics'),
             onCarbon: () => goTo(context, '/analytics'),
           ),
+          const ProgrammeStrip(),
           const SizedBox(height: kGap),
           const GenerationVsConsumptionCard(),
           const SizedBox(height: kGap),

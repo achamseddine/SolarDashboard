@@ -12,13 +12,28 @@ import 'widgets/station_table.dart';
 
 /// Schools list: search, filters, sort, wide table, CSV export.
 class StationsScreen extends ConsumerStatefulWidget {
-  const StationsScreen({super.key, this.initialQuery, this.initialRegion, this.initialStatus, this.initialFilter});
+  const StationsScreen({super.key, this.initialQuery, this.initialRegion, this.initialStatus, this.initialFilter, this.initialConnected, this.initialLinked});
   final String? initialQuery;
   final String? initialRegion;
   final String? initialStatus;
 
   /// Quick filter from the dashboard: `alarms`, `underperforming`, `lowsoc`.
   final String? initialFilter;
+
+  /// `1`/`0`: only plants whose linked school is (not) internet-connected.
+  final String? initialConnected;
+
+  /// `1`/`0`: only plants (not) linked to a MEHE school record.
+  final String? initialLinked;
+
+  StationFilter get _routeFilter => StationFilter.fromRoute(
+        query: initialQuery,
+        region: initialRegion,
+        status: initialStatus,
+        filter: initialFilter,
+        connected: initialConnected,
+        linked: initialLinked,
+      );
 
   @override
   ConsumerState<StationsScreen> createState() => _StationsScreenState();
@@ -31,7 +46,7 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
   @override
   void initState() {
     super.initState();
-    _filter = StationFilter.fromRoute(query: widget.initialQuery, region: widget.initialRegion, status: widget.initialStatus, filter: widget.initialFilter);
+    _filter = widget._routeFilter;
     _search = TextEditingController(text: _filter.query);
   }
 
@@ -40,9 +55,14 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
     super.didUpdateWidget(old);
     // A new deep link (e.g. dashboard → "/stations?status=offline") while
     // already on this screen replaces the filter.
-    if (old.initialQuery != widget.initialQuery || old.initialRegion != widget.initialRegion || old.initialStatus != widget.initialStatus || old.initialFilter != widget.initialFilter) {
-      final next = StationFilter.fromRoute(query: widget.initialQuery, region: widget.initialRegion, status: widget.initialStatus, filter: widget.initialFilter);
-      _filter = next.copyWith(sort: _filter.sort, ascending: _filter.ascending);
+    final changed = old.initialQuery != widget.initialQuery ||
+        old.initialRegion != widget.initialRegion ||
+        old.initialStatus != widget.initialStatus ||
+        old.initialFilter != widget.initialFilter ||
+        old.initialConnected != widget.initialConnected ||
+        old.initialLinked != widget.initialLinked;
+    if (changed) {
+      _filter = widget._routeFilter.copyWith(sort: _filter.sort, ascending: _filter.ascending);
       _search.text = _filter.query;
     }
   }
@@ -58,6 +78,8 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
   @override
   Widget build(BuildContext context) {
     final insights = ref.watch(fleetInsightsProvider);
+    // Plant → MEHE school links (automatic by name + coordinates, or manual).
+    final schools = ref.watch(linkedSchoolsProvider).value ?? const {};
     return Padding(
       padding: kPagePadding,
       child: AsyncView<FleetInsights>(
@@ -65,7 +87,7 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
         emptyWhen: (d) => d.stations.isEmpty,
         emptyMessage: 'No schools yet – data appears after the first sync.',
         builder: (data) {
-          final rows = _filter.apply(data.stations);
+          final rows = _filter.apply(data.stations, schools: schools);
           final regionCounts = <String, int>{};
           for (final s in data.stations) {
             regionCounts[s.region] = (regionCounts[s.region] ?? 0) + 1;
@@ -79,14 +101,14 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
                 actions: [
                   Builder(
                     builder: (ctx) => FilledButton.tonalIcon(
-                      onPressed: rows.isEmpty ? null : () => exportStationsCsv(ctx, rows),
+                      onPressed: rows.isEmpty ? null : () => exportStationsCsv(ctx, rows, schools: schools),
                       icon: const Icon(Icons.download_outlined, size: 18),
                       label: const Text('Export CSV'),
                     ),
                   ),
                 ],
               ),
-              StationFilterBar(filter: _filter, onChanged: _update, searchController: _search, regionCounts: regionCounts),
+              StationFilterBar(filter: _filter, onChanged: _update, searchController: _search, regionCounts: regionCounts, schools: schools),
               const SizedBox(height: kGap),
               Expanded(
                 child: rows.isEmpty
@@ -111,6 +133,7 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
                               child: StationTable(
                                 rows: rows,
                                 filter: _filter,
+                                schools: schools,
                                 onSort: (sort, asc) => _update(_filter.copyWith(sort: sort, ascending: asc)),
                                 onTap: (s) => goTo(context, '/stations/${s.id}'),
                               ),
@@ -134,6 +157,10 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
       if (_filter.withAlarms) 'with alarms',
       if (_filter.underPerforming) 'under-performing',
       if (_filter.lowSoc) 'low SOC',
+      if (_filter.connected == true) 'connected',
+      if (_filter.connected == false) 'not connected',
+      if (_filter.linked == true) 'linked',
+      if (_filter.linked == false) 'unlinked',
       if (_filter.query.isNotEmpty) '"${_filter.query}"',
     ];
     return bits.isEmpty ? base : '$base · ${bits.join(' · ')}';

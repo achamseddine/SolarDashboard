@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/alert.dart';
 import '../../../core/models/fleet_insights.dart';
+import '../../../core/models/school.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils/format.dart';
 import '../../common/widgets.dart';
@@ -9,7 +10,7 @@ import '../station_filters.dart';
 
 /// Wide schools table; the caller wraps it in a horizontal scroll view.
 class StationTable extends StatelessWidget {
-  const StationTable({super.key, required this.rows, required this.filter, required this.onSort, required this.onTap, this.now});
+  const StationTable({super.key, required this.rows, required this.filter, required this.onSort, required this.onTap, this.now, this.schools = const {}});
 
   final List<StationInsight> rows;
   final StationFilter filter;
@@ -17,10 +18,16 @@ class StationTable extends StatelessWidget {
   final void Function(StationInsight s) onTap;
   final DateTime? now;
 
+  /// Station id → linked MEHE school (CERD, connectivity, donor columns).
+  final Map<int, School> schools;
+
   /// Column order with the sort key each header toggles (null = not sortable).
   static const List<(String, StationSort?, bool)> columns = [
     ('Status', StationSort.status, false),
     ('School', StationSort.name, false),
+    ('CERD', StationSort.cerd, true),
+    ('Internet', null, false),
+    ('Donor', null, false),
     ('kWp', null, true),
     ('PV now', StationSort.generationNow, true),
     ('Load now', null, true),
@@ -76,6 +83,9 @@ class StationTable extends StatelessWidget {
                   ),
                 ),
               ),
+              DataCell(_CerdCell(schools[s.id])),
+              DataCell(_InternetCell(schools[s.id])),
+              DataCell(_DonorCell(schools[s.id])),
               DataCell(Text(Fmt.capacity(s.kwp), style: tabular)),
               DataCell(Text(Fmt.power(s.snapshot?.generationW), style: tabular)),
               DataCell(Text(Fmt.power(s.snapshot?.consumptionW), style: tabular)),
@@ -93,6 +103,55 @@ class StationTable extends StatelessWidget {
             ],
           ),
       ],
+    );
+  }
+}
+
+/// CERD number of the linked MEHE school, "–" when the plant is unlinked.
+class _CerdCell extends StatelessWidget {
+  const _CerdCell(this.school);
+  final School? school;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme.bodyMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    final school = this.school;
+    if (school == null) return Tooltip(message: 'Not matched to a MEHE school record', child: Text('–', style: t));
+    return Tooltip(message: '${school.name}${school.nameAr == null ? '' : '\n${school.nameAr}'}', child: Text('${school.cerd}', style: t));
+  }
+}
+
+/// Internet connectivity of the linked school (MEHE/UNICEF roll-out list).
+class _InternetCell extends StatelessWidget {
+  const _InternetCell(this.school);
+  final School? school;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme.bodyMedium;
+    final school = this.school;
+    if (school == null) return Tooltip(message: 'Unknown – plant not linked to a school', child: Text('–', style: t));
+    if (school.connected) {
+      return const Tooltip(message: 'On the internet-connectivity roll-out list', child: Icon(Icons.wifi, size: 18, color: AppColors.good, semanticLabel: 'connected'));
+    }
+    return const Tooltip(message: 'Not on the internet-connectivity roll-out list', child: Icon(Icons.wifi_off, size: 18, color: AppColors.muted, semanticLabel: 'not connected'));
+  }
+}
+
+/// Donor group from the UNICEF solar implementation tracker.
+class _DonorCell extends StatelessWidget {
+  const _DonorCell(this.school);
+  final School? school;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme.bodyMedium;
+    final solar = school?.solar;
+    final label = solar?.donorGroup ?? '–';
+    final tip = solar == null ? 'No record in the solar implementation tracker' : [solar.donor ?? label, ?solar.project].join(' · ');
+    return Tooltip(
+      message: tip,
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 110), child: Text(label, style: t, maxLines: 1, overflow: TextOverflow.ellipsis)),
     );
   }
 }

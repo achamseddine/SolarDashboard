@@ -6,6 +6,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/theme.dart';
 import '../common/widgets.dart';
 import 'widgets/credentials_card.dart';
+import 'widgets/dataset_card.dart';
 import 'widgets/diagnostics_card.dart';
 
 const appVersion = '1.0.0';
@@ -53,6 +54,8 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: const Text('No network needed. Switch off to use the DeyeCloud account. Data from both sources share the same local database — use "Clear all data" when switching.'),
           ),
         ),
+        const SizedBox(height: kGap),
+        const DatasetCard(),
         const SizedBox(height: kGap),
         SectionCard(
           title: 'Synchronisation',
@@ -108,6 +111,7 @@ class SettingsScreen extends ConsumerWidget {
               SwitchListTile(contentPadding: EdgeInsets.zero, value: s.keepScreenOn, onChanged: (v) => set((x) => x.copyWith(keepScreenOn: v)), title: const Text('Keep screen on'), subtitle: const Text('For wall-mounted / kiosk tablets')),
               _SliderTile(label: 'CO₂ factor', value: s.co2FactorKgPerKwh, min: 0.2, max: 1.2, divisions: 100, unit: 'kg/kWh', decimals: 2, onChanged: (v) => set((x) => x.copyWith(co2FactorKgPerKwh: v)), hint: 'Emissions avoided per self-consumed kWh (grid + diesel generators)'),
               _SliderTile(label: 'Diesel factor', value: s.dieselLitresPerKwh, min: 0.1, max: 0.5, divisions: 40, unit: 'L/kWh', decimals: 2, onChanged: (v) => set((x) => x.copyWith(dieselLitresPerKwh: v)), hint: 'Generator fuel per kWh'),
+              _SliderTile(label: 'Expected PV yield', value: s.specificYieldKwhPerKwp, min: 1000, max: 2000, divisions: 20, unit: 'kWh/kWp·yr', onChanged: (v) => set((x) => x.copyWith(specificYieldKwhPerKwp: v)), hint: 'Used to compare installed capacity with the audited school loads'),
               _SliderTile(label: 'School day starts', value: s.schoolDayStartHour.toDouble(), min: 6, max: 10, divisions: 4, unit: 'h', onChanged: (v) => set((x) => x.copyWith(schoolDayStartHour: v.round()))),
               _SliderTile(label: 'School day ends', value: s.schoolDayEndHour.toDouble(), min: 12, max: 18, divisions: 6, unit: 'h', onChanged: (v) => set((x) => x.copyWith(schoolDayEndHour: v.round()))),
             ],

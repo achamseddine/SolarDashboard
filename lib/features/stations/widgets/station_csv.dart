@@ -7,11 +7,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/fleet_insights.dart';
+import '../../../core/models/school.dart';
 
-/// Column headers of the schools CSV export.
+/// Column headers of the schools CSV export. The `cerd`, `mehe_school_name`,
+/// `connected`, `donor` and `students` columns come from the linked MEHE
+/// school record and are empty for unlinked plants.
 const List<String> stationCsvColumns = [
   'id',
   'name',
+  'cerd',
+  'mehe_school_name',
+  'connected',
+  'donor',
+  'students',
   'governorate',
   'caza',
   'address',
@@ -45,11 +53,17 @@ String _num(double? v, [int decimals = 2]) => v == null ? '' : v.toStringAsFixed
 String _iso(int? ts) => ts == null ? '' : DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toIso8601String();
 
 /// One CSV row per station (raw numbers, no units, empty for unknown).
-List<List<Object?>> stationCsvRows(List<StationInsight> rows) => [
+/// [schools] maps a station id to its linked MEHE school.
+List<List<Object?>> stationCsvRows(List<StationInsight> rows, {Map<int, School> schools = const {}}) => [
       for (final s in rows)
         [
           s.id,
           s.name,
+          schools[s.id]?.cerd ?? '',
+          schools[s.id]?.name ?? '',
+          schools[s.id] == null ? '' : (schools[s.id]!.connected ? 'yes' : 'no'),
+          schools[s.id]?.solar?.donorGroup ?? '',
+          schools[s.id]?.students ?? '',
           s.region,
           s.station.caza ?? '',
           s.station.address ?? '',
@@ -80,15 +94,16 @@ List<List<Object?>> stationCsvRows(List<StationInsight> rows) => [
     ];
 
 /// Serialises the current rows to CSV text.
-String buildStationsCsv(List<StationInsight> rows) => Csv(lineDelimiter: '\n', addBom: true).encode([stationCsvColumns, ...stationCsvRows(rows)]);
+String buildStationsCsv(List<StationInsight> rows, {Map<int, School> schools = const {}}) =>
+    Csv(lineDelimiter: '\n', addBom: true).encode([stationCsvColumns, ...stationCsvRows(rows, schools: schools)]);
 
 /// Writes the rows to a temp file and opens the platform share sheet.
 /// Reports success or failure with a SnackBar; never throws.
-Future<void> exportStationsCsv(BuildContext context, List<StationInsight> rows) async {
+Future<void> exportStationsCsv(BuildContext context, List<StationInsight> rows, {Map<int, School> schools = const {}}) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   final origin = _shareOrigin(context);
   try {
-    final csv = buildStationsCsv(rows);
+    final csv = buildStationsCsv(rows, schools: schools);
     final dir = await getTemporaryDirectory();
     final now = DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');

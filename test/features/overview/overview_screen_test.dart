@@ -35,4 +35,23 @@ void main() {
     expect(seen, containsAll(['Generation vs consumption today', 'Energy balance', 'Carbon footprint avoided by month', 'Fleet health', 'Generation today by governorate']));
     await TestEnv.drain(tester);
   });
+
+  testWidgets('overview shows the solarisation programme strip', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final env = await TestEnv.createFor(tester, schools: 20);
+    addTearDown(() => tester.runAsync(env.dispose));
+
+    await tester.pumpWidget(env.wrap(const OverviewScreen()));
+    await TestEnv.settle(tester, rounds: 5);
+    final list = find.byType(ListView).first;
+    await tester.drag(list, const Offset(0, -350));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Solarisation programme'), findsOneWidget);
+    expect(find.text('Monitored plants'), findsOneWidget);
+    expect(find.textContaining('public schools solarised'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await TestEnv.drain(tester);
+  });
 }

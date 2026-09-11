@@ -7,6 +7,7 @@ import 'nav.dart';
 import 'widgets/detail_kpis.dart';
 import 'widgets/device_cards.dart';
 import 'widgets/power_flow_panel.dart';
+import 'widgets/school_profile_card.dart';
 import 'widgets/station_alerts.dart';
 import 'widgets/station_charts.dart';
 import 'widgets/station_header.dart';
@@ -68,6 +69,8 @@ class _StationDetailScreenState extends ConsumerState<StationDetailScreen> {
               left: PowerFlowPanel(latest: det.latest, staleAfterMinutes: staleMinutes),
               right: DetailKpis(latest: det.latest, insight: det.insight),
             ),
+            const SizedBox(height: kGap),
+            SchoolProfileCard(stationId: det.station.id, paused: _refreshing),
             const SizedBox(height: kGap),
             TodayPowerCard(detail: det),
             const SizedBox(height: kGap),
