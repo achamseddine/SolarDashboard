@@ -57,11 +57,11 @@ Notes:
 
 | Programme (solarisation coverage) | Programme (funding, audited loads) |
 |-----------------------------------|------------------------------------|
-| ![Programme](docs/screenshots/programme.png) | ![Programme 2](docs/screenshots/programme_2.png) |
+| ![Programme](docs/screenshots/programme.png) | ![Programme 2](docs/screenshots/programme_3.png) |
 
 | Programme (attention lists, measured vs audited) | Programme (education, links) |
 |--------------------------------------------------|------------------------------|
-| ![Programme 3](docs/screenshots/programme_3.png) | ![Programme 4](docs/screenshots/programme_4.png) |
+| ![Programme 3](docs/screenshots/programme_8.png) | ![Programme 4](docs/screenshots/programme_11.png) |
 
 | Analytics | Schools (CERD, internet, donor columns) |
 |-----------|-----------------------------------------|
