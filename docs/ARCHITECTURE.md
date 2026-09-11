@@ -23,12 +23,15 @@ lib/
       sync.dart                  SyncStatus, SyncPhase, SyncLogEntry
       credentials.dart           DeyeCredentials, DeyeRegion
       fleet_insights.dart        FleetInsights + StationInsight + RegionInsight + AlarmInsight
+      school.dart                School, SchoolSolar, SchoolLoads, SchoolEquipment, SchoolEducation, StationSchoolLink
+      school_insights.dart       SchoolInsights + SchoolInsight + RegionCoverage + ProgrammeSlice + AttendanceComparison
     db/
       app_database.dart          AppDatabase.open(path) → Database; schema + migrations
       station_dao.dart           stations, station_latest, snapshots, daily/monthly energy, buckets, status events, battery days
       device_dao.dart            devices, device_latest, device_samples
       alert_dao.dart             alerts (upsert keeps ack), counts, lifecycle helpers, MTTR
       sync_dao.dart              sync_log + sync_meta
+      school_dao.dart            schools ⋈ school_solar ⋈ school_loads ⋈ school_education, equipment, station_school_links
       retention.dart             chunked purge
     settings/
       credential_store.dart      CredentialStore (flutter_secure_storage) + build-time --dart-define seed
@@ -40,8 +43,12 @@ lib/
       station_region.dart        9 governorates + districts: point-in-polygon (bundled GeoJSON), keywords, centroids
     insights/
       fleet_insights_builder.dart  pure functions: build FleetInsights from DB snapshots
+      school_insights_builder.dart programme roll-ups: dataset ⋈ links ⋈ FleetInsights
+    schools/
+      school_dataset.dart        SchoolDataset (assets/data/schools.json), SchoolDatasetImporter (once per version)
+      station_school_linker.dart StationSchoolLinker: plant → CERD by name (transliteration-folded) + coordinates
     demo/
-      demo_deye_api.dart         DemoDeyeApi implements DeyeApi with ~60 synthetic Lebanese schools
+      demo_deye_api.dart         DemoDeyeApi implements DeyeApi; plants impersonate real solarised schools (DemoSeed)
     providers.dart               Riverpod providers: database, apiClient, syncEngine, settings, streams
     theme.dart                   colours (UNICEF cyan #1CABE2 accent), status palette, text styles
     utils/format.dart            number/energy/power/time formatters (kW, kWh, relative time)
@@ -49,11 +56,13 @@ lib/
   features/
     shell/app_shell.dart         NavigationRail + content area, sync status bar, offline banner
     dashboard/                   fleet dashboard (KPI tiles, charts, rankings, region table, alarm summary)
+    programme/                   solarisation programme dashboard (coverage, funding, audited loads, education, links)
     stations/                    schools list (search/filter/sort) and station detail (flow diagram, charts, devices, alerts)
     alarms/                      alarm centre
     map/                         Lebanon map with status markers (flutter_map, OSM tiles, graceful offline)
     settings/                    credentials, region, intervals, retention, export CSV, DB stats, demo toggle
   test/ ...                      unit + widget tests (sqflite_common_ffi in-memory DB)
+assets/data/schools.json         bundled MEHE/UNICEF school dataset (built by scripts/build_school_dataset.py)
 ```
 
 ## Data flow
@@ -108,7 +117,7 @@ lib/
 4. **FleetInsightsBuilder** reads `stations ⋈ station_latest`, `station_daily` sums, status events,
    alarm counts and battery days (all ≤ N rows) and produces `FleetInsights` (pure Dart, unit-tested).
 
-## SQLite schema (v1)
+## SQLite schema (v2)
 
 | Table | Key | Purpose / retention |
 |-------|-----|---------------------|
@@ -124,9 +133,62 @@ lib/
 | `power_buckets` | `(region, bucket_ts)` | 15-min fleet (`region=''`) and governorate sums; 400 days |
 | `station_status_events` | `(station_id, start_ts)` | status transitions; kept |
 | `alerts` | `id` | cloud (`cloud:<id>`) and derived (`derived:<sn>:<code>`) alarms, `acknowledged`; recovered kept 1 year |
-| `sync_log`, `sync_meta` | | phase log (last 500) and timing metadata |
+| `sync_log`, `sync_meta` | | phase log (last 500) and timing metadata; `schools.*` keys record the imported dataset version |
+| `schools` | `cerd` | MEHE public school master record (names EN/AR, governorate/caza normalised to the app's regions, ownership, capacity, coordinates, address, school phone, students AM/PM, enrolment, PM-shift CERD, `connected`) — v2 |
+| `school_solar` | `cerd` | UNICEF solar tracker: status, donor/grant + group, project, contractor, consultant, cost, kWp, inverter kW, battery kWh, LED/QA cost, shift, language — v2 |
+| `school_loads` | `cerd` | energy audit: annual load per category (kWh/year) — v2 |
+| `school_equipment` | `id` (index `cerd`) | energy audit inventory: type, category, W, count, h/day, kWh/year — v2 |
+| `school_education` | `cerd` | MEHE education dashboard: attendance rates, risk levels, PM teachers, monthly risk JSON — v2 |
+| `station_school_links` | `station_id` | plant → CERD with `method` (manual / cerd / name_location / name / location) and `confidence`; kept across "Clear all data" — v2 |
+
+Schema versions only add tables (`CREATE … IF NOT EXISTS`), so `onUpgrade` simply re-runs the schema
+script. The five dataset tables are replaced atomically when the bundled JSON's `version` changes
+(`SchoolDatasetImporter`), and are *not* deleted by "Clear all data".
 
 Pragmas: WAL, `synchronous=NORMAL`, `temp_store=MEMORY`, 16 MB cache, 5 s busy timeout.
+
+## School dataset (MEHE / UNICEF workbooks)
+
+`scripts/build_school_dataset.py <dir with the xlsx files>` merges the five workbooks by **CERD
+number** (the MEHE school id every file shares) into `assets/data/schools.json` (~1.5 MB, 1,246
+schools):
+
+| Workbook | Sheet(s) | What is taken |
+|----------|----------|---------------|
+| Overview_of_Public_Schools | Public Schools | master list of 1,211 public schools (names, caza, CAS code, ownership, capacity, coordinates, address, school phone, students, enrolment) |
+| Connectivity534Schools | Sheet1 | the 534 schools in the internet-connectivity roll-out → `connected` |
+| Public_Schools_Solar_Implementation | Solarized Schools, Contractors | solar status, donor/grant, project, cost, kWp, inverter kW, battery kWh, LED/QA cost, shift, language, contractor, consultant |
+| Energy_Breakdown | Sheet2 (loads), Sheet1 (inventory) | annual load per category (kWh/year) and the equipment inventory (both kept; the two sheets do not reconcile for most schools, so the inventory is shown as-is and the category sheet is used for totals) |
+| EDU_Dashboard_Data | Student Attendance, Student Risk Level, PM Teachers Risk Level, School List | attendance rates, risk levels, PM teachers, teaching days, AM ↔ PM CERD |
+
+Governorates are normalised to the app's nine regions (Keserwan-Jbeil is split out of Mount Lebanon by
+caza) and cazas to the geoBoundaries district names used for plants. **Personal data (director names,
+personal mobile numbers) is not exported** — the repository is public and the JSON ships inside the APK.
+
+### Plant ↔ school linking
+
+`StationSchoolLinker` runs after every plant-list sync (and from Settings). For each plant without a
+manual link it looks for, in order: a CERD number written in the plant name; the best
+**weighted token overlap** (IDF-weighted, transliteration folded to consonant skeletons so
+*Achrafieh/Ashrafiyeh*, *Msaytbeh/Mousseitbeh*, *Tariq/Tarik* agree; Arabic names normalised too)
+between the plant name and the school's English, tracker and Arabic names, combined with the
+**distance** between plant and school coordinates (≤ 150 m strong, ≤ 5 km weak); finally a lone school
+within 150 m. Close runners-up (schools sharing a compound) block an automatic link, which is then set
+by hand on the plant page (search by name or CERD, suggestions shown with confidence and distance).
+In demo mode the synthetic plants take the *tracker* names and coordinates of real solarised schools,
+so the matcher is exercised end-to-end (tests require 90 %+ recall and zero wrong links).
+
+### Programme insights (`SchoolInsightsBuilder`)
+
+Joins the dataset with the links and `FleetInsights`: coverage (public / solarised / pipeline /
+connected / solarised + connected / monitored) overall and per governorate, students benefiting,
+installed kWp / inverter kW / battery kWh, investment and cost per kWp and per student, slices by
+donor group / project / contractor / ownership, audited load by category, expected annual generation
+(kWp × specific yield, Settings, default 1,500 kWh/kWp·yr) vs audited load (sizing ratio, undersized
+systems), measured 30-day generation/consumption of monitored schools vs the audit (coverage, audit
+accuracy), LED share of lighting, top equipment loads, next solarisation candidates by audited load,
+plants down at schools without connectivity, attendance comparisons (solarised vs not, connected vs
+not, monitored vs not — descriptive only), link statistics and unlinked plants.
 
 ## Insights computed for the dashboard (all from local DB)
 
@@ -161,5 +223,7 @@ into secure storage on first launch and can be overridden in Settings.
 ## Demo mode
 
 `DemoDeyeApi` implements `DeyeApi` (the abstract interface used by `SyncEngine`) with ~60 synthetic
-schools across all governorates, realistic diurnal PV curves, batteries, and alarms, so the whole app
-can be exercised without network access. Toggle in Settings; unit/widget tests use it too.
+plants across all governorates, realistic diurnal PV curves, batteries, and alarms, so the whole app
+can be exercised without network access. The plants borrow the names, coordinates and system sizes of
+real solarised schools from the bundled dataset (`DemoSeed`), so school links, the programme dashboard
+and the school profile are populated in demo mode. Toggle in Settings; unit/widget tests use it too.

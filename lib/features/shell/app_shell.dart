@@ -15,6 +15,7 @@ class AppShell extends ConsumerWidget {
   static const _destinations = [
     (path: '/dashboard', icon: Icons.dashboard_outlined, selected: Icons.dashboard, label: 'Dashboard'),
     (path: '/analytics', icon: Icons.bar_chart, selected: Icons.bar_chart, label: 'Analytics'),
+    (path: '/programme', icon: Icons.fact_check_outlined, selected: Icons.fact_check, label: 'Programme'),
     (path: '/stations', icon: Icons.school_outlined, selected: Icons.school, label: 'Schools'),
     (path: '/alarms', icon: Icons.notifications_outlined, selected: Icons.notifications, label: 'Alarms'),
     (path: '/map', icon: Icons.map_outlined, selected: Icons.map, label: 'Map'),

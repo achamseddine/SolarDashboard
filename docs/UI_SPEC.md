@@ -27,6 +27,12 @@ except through those providers (the only on-demand network call is `SyncEngine.r
   `StationInsight` list with yields, peer median, performance ratio, availability, outage, SOC, alarms.
 * `stationDetailProvider(id)` → `StationDetail`: station, latest, devices + `DeviceLatest` map,
   today/yesterday frames, 30-day daily, 12-month monthly, alerts, battery days, status events, insight.
+* `schoolInsightsProvider` → `SchoolInsights` (see `lib/core/models/school_insights.dart`): programme
+  coverage totals and per governorate, slices by donor/project/contractor/ownership, audited loads,
+  expected vs measured generation, education comparisons, link statistics, per-school `SchoolInsight`
+  (school record + link + linked `StationInsight`). `schoolProfileProvider(stationId)` → linked school
+  with equipment inventory; `linkedSchoolsProvider` → station id → `School`; `linkSuggestionsProvider`;
+  `schoolDatasetInfoProvider`.
 * `alertsProvider(AlertFilter)` → `List<SolarAlert>`; `powerBucketsProvider((region, hours))` →
   fleet/region 15-min `PowerBucket`s; `syncStatusProvider`, `syncLogsProvider`, `dbStatsProvider`,
   `settingsProvider`, `credentialsProvider`, `canSyncProvider`, `appLogProvider`, `syncEngineProvider`.
@@ -77,6 +83,13 @@ On open call `ref.read(syncEngineProvider).refreshStation(id)` once. Layout:
   W values and arrows coloured by direction; SOC meter (same-ramp track); data timestamp + age.
 * KPI tiles: today generation/consumption/import/export, yield today so far, yield 7 d vs peer median,
   self-sufficiency 7 d, availability 30 d, outages 30 d, hours below 20 % SOC today, grid hours today.
+* **School record** (`SchoolProfileCard`): the linked MEHE school (CERD, Arabic name, ownership,
+  capacity, students AM/PM, enrolment, address, school phone, connectivity chip), solar tracker data
+  (status, donor, project, contractor, consultant, cost, LED/QA cost, tracker kWp/inverter/battery vs
+  cloud capacity), audited annual load by category with expected generation, sizing ratio, measured
+  30-day generation/consumption, equipment inventory (expandable), education indicators; "Change link"
+  opens the school picker (search by name/Arabic name/CERD, automatic suggestions with confidence and
+  distance, unlink, re-run matching). Unlinked plants show a "Link to a school" prompt.
 * **Today** `PowerLineChart` (frames) with yesterday as gray context line (emphasis form).
 * **30-day energy** stacked/grouped `EnergyBarChart`; **12-month** chart; battery `SocHistogram`/30-day
   SOC min-max band (line chart).
@@ -93,21 +106,34 @@ List/table rows: level chip, school (tap → detail), device type/serial, name, 
 `syncStatus.alertsUnsupportedReason != null` explaining cloud alarms are unavailable and derived alarms
 still work. Honour `initialStationId`.
 
+### Programme (`/programme`)
+Solarisation programme dashboard built from the MEHE/UNICEF dataset joined with the live fleet: KPI
+grid (public schools, solarised, pipeline, connected, solar + connected, monitored plants, installed
+kWp, investment, students benefiting), coverage by governorate (stacked bars + connectivity share),
+solar status donut, funding by donor/project/contractor, audited load by category vs expected and
+measured generation (sizing ratio, LED share, top equipment loads), attention lists (solarised but not
+monitored, plants down without connectivity, undersized systems, next candidates), measured vs
+audited coverage per monitored school, education indicators (attendance comparisons — descriptive
+only), plant ↔ school link statistics with the unlinked plants. Every card copes with an empty fleet.
+
 ### Map (`/map`)
 `flutter_map` with OSM tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, userAgentPackageName
 `org.unicef.unicef_solar_monitor`), centred on Lebanon (33.85, 35.85, zoom 8). Draw governorate outlines
 from `boundariesProvider` (`GeoArea.outlines`) as thin polylines. Markers per plant coloured by status
 (cluster-free; ≤ 1500 simple circle markers is fine), size by kWp; tap → bottom sheet with key figures
 and "Open". Filter chips (status, region). Legend. Handle tile loading failures gracefully (tiles are
-optional; the outlines and markers must still render offline).
+optional; the outlines and markers must still render offline). Optional **Public schools** layer: every
+school with coordinates as a small marker coloured by solarisation status (solarised without plant,
+pipeline, not solarised; connected schools ringed), "Connected only" toggle, tap → school sheet.
 
 ### Settings (`/settings`)
 Sections: **DeyeCloud account** (App ID, App Secret, e-mail, password *or* SHA-256 hash — explain that
 either is accepted —, company id, region EU/US; "Test connection" runs `accountInfo()` and shows the
 result; save → `credentialsProvider.save`; note that credentials are stored in the device secure
-store), **Demo mode** switch, **Sync** (auto-sync, poll interval, station/latest interval, alarm
+store), **Demo mode** switch, **School dataset** (version, generated/imported dates, counts, links, sources,
+re-import, re-link), **Sync** (auto-sync, poll interval, station/latest interval, alarm
 intervals, concurrency, stale threshold, retention days, nightly backfill, "Sync now", "Clear all data"),
-**Display** (dark mode, keep screen on, CO₂ and diesel factors, school hours), **Advanced** (alert
+**Display** (dark mode, keep screen on, CO₂ and diesel factors, expected PV yield, school hours), **Advanced** (alert
 endpoint paths override), **Diagnostics** (sync log table, DB statistics, app log with copy button,
 app version). A first-run banner when `!canSync`.
 

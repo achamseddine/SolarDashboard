@@ -15,16 +15,18 @@ governorate roll-ups, rankings and environmental impact — all readable offline
 | Area | What you get |
 |------|--------------|
 | Landing dashboard | fleet-wide power generation and consumption (now, today, 7 d, 30 d, lifetime), carbon footprint avoided with diesel equivalent, generation-vs-consumption curve, energy balance, carbon by month, fleet health, generation by governorate |
+| Programme | solarisation programme dashboard from the MEHE/UNICEF workbooks: public schools vs solarised vs connected vs monitored (overall and per governorate), pipeline, students benefiting, installed kWp, investment and cost per kWp, funding by donor/project/contractor, audited annual loads by category vs expected and measured generation, undersized systems, next candidates, LED share, education indicators, plant ↔ school link status |
 | Analytics | schools online/offline/alarm/stale, live PV / load / grid / battery totals, capacity utilisation, today's and 30-day energy, self-sufficiency, availability, CO₂ and diesel avoided, governorate table, attention lists (offline, under-performing, low battery, critical alarms), top/bottom yield rankings, SOC histogram, alarm trends |
-| Schools | searchable, filterable, sortable table of every plant with live values, 7-day specific yield vs governorate peers, availability, alarms, last data; CSV export |
-| School detail | live power-flow diagram, today's power curve (yesterday as context), 30-day / 12-month energy, battery SOC history, every inverter/battery reading, alarms, status history |
+| Schools | searchable, filterable, sortable table of every plant with live values, 7-day specific yield vs governorate peers, availability, alarms, last data, linked CERD, internet connectivity and donor; CSV export |
+| School detail | live power-flow diagram, today's power curve (yesterday as context), 30-day / 12-month energy, battery SOC history, every inverter/battery reading, alarms, status history, plus the linked MEHE school record (students, ownership, connectivity, solar tracker data, audited loads and equipment inventory vs measured generation, attendance and risk) with a manual link picker |
 | Alarms | cloud alarms (DeyeCloud alert list) plus locally derived alarms (plant offline, device alarm state, alert messages, low SOC, over-temperature, PV string fault, no midday generation), acknowledge, filters, MTTR |
-| Map | Lebanon map with governorate outlines and status-coloured markers per school |
-| Settings | DeyeCloud credentials (secure storage), demo mode, sync cadence, retention, factors, diagnostics (sync log, DB stats, app log) |
+| Map | Lebanon map with governorate outlines and status-coloured markers per plant, plus an optional layer of all public schools coloured by solarisation status and connectivity |
+| Settings | DeyeCloud credentials (secure storage), demo mode, school dataset (version, counts, re-import, re-link), sync cadence, retention, factors, diagnostics (sync log, DB stats, app log) |
 
 Everything is stored locally in SQLite (`unicef_solar.db`): plant master data, live values,
 per-plant power time series, per-device samples, daily/monthly energy, battery statistics, status
-transitions, alarms and the sync log. Retention of raw time series is configurable (default 7 days);
+transitions, alarms, the sync log, the school dataset (MEHE master list, connectivity, solar tracker,
+energy audit, education indicators) and the plant ↔ school links. Retention of raw time series is configurable (default 7 days);
 daily/monthly energy and status history are kept indefinitely.
 
 ## Getting started
@@ -109,6 +111,25 @@ flutter build apk --release \
 realistic diurnal PV, school-hours load, EDL outages, batteries, faults and alarm history — useful for
 training, screenshots and UI work without network access. Tests use the same generator.
 
+## School dataset (MEHE / UNICEF workbooks)
+
+Five workbooks — the MEHE public school list (1,211 schools), the internet-connectivity roll-out
+(534 schools), the UNICEF solar implementation tracker, the energy audit (annual loads and equipment
+inventory) and the MEHE education dashboard — are merged by **CERD number** into
+`assets/data/schools.json` with:
+
+```bash
+pip install openpyxl
+python3 scripts/build_school_dataset.py <folder containing the .xlsx files>
+```
+
+Bump `version` in the script when the workbooks change; the app re-imports the JSON into SQLite on
+the next start. Director names and personal phone numbers are deliberately left out. Plants are
+linked to school records automatically after every sync (name similarity with transliteration
+folding + coordinates) and can be linked by hand from the school page; the *Programme* tab, the school
+profile on each plant page, the list columns and the map layer all read from these tables. Details in
+`docs/ARCHITECTURE.md`.
+
 ## How synchronisation works (short version)
 
 Every 5 minutes (configurable) the engine: lists plants → lists devices (hourly) → polls all inverters
@@ -139,11 +160,13 @@ written, so a few items are implemented defensively and should be checked on fir
 ## Repository layout
 
 ```
-lib/core        models, API client, SQLite DAOs, sync engine, insights, demo data, settings
-lib/features    dashboard, stations, alarms, map, settings, shared widgets/charts, shell
+lib/core        models, API client, SQLite DAOs, sync engine, insights, school dataset + linker, demo data, settings
+lib/features    overview, dashboard (analytics), programme, stations, alarms, map, settings, shared widgets/charts, shell
 assets/geo      Lebanon governorate/district polygons (geoBoundaries, CC BY 4.0)
+assets/data     schools.json — merged MEHE/UNICEF school dataset (no personal data)
+scripts         build_school_dataset.py (xlsx → JSON), screenshots.sh
 docs            API reference, architecture, UI specification
-test            core unit tests, end-to-end sync test, widget tests
+test            core unit tests (incl. dataset/linker/insights), end-to-end sync test, widget tests
 ```
 
 ## Licence / attribution
