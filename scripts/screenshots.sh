@@ -25,7 +25,8 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x720+0+0 +repage "$OUT/$1$SUFFIX.png"; }
   scroll() { xdotool mousemove 200 600; for i in $(seq 1 "$1"); do xdotool click 5; done; }
   # Navigation rail items (x=95 in the extended rail).
-  # Rail rows: dashboard 150, analytics 194, programme 238, schools 282, alarms 326, map 370, settings 414.
+  # Rail rows: dashboard 150, analytics 194, programme 238, connectivity 282,
+  #            schools 326, plants 370, alarms 414, map 458, settings 502.
   xdotool mousemove 95 150 click 1; shot dashboard
   scroll 4; shot dashboard_2
   scroll 6; shot dashboard_3
@@ -46,16 +47,28 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 6; shot programme_9
   scroll 6; shot programme_10
   scroll 8; shot programme_11
-  xdotool mousemove 95 282 click 1; shot schools
-  xdotool mousemove 500 330 click 1; sleep 4; shot school_detail
-  scroll 4; shot school_detail_2
-  scroll 6; shot school_detail_3
-  scroll 6; shot school_detail_4
-  scroll 8; shot school_detail_5
-  xdotool mousemove 95 326 click 1; shot alarms
-  xdotool mousemove 95 370 click 1; sleep 4; shot map
+  xdotool mousemove 95 282 click 1; shot connectivity
+  scroll 5; shot connectivity_2
+  scroll 6; shot connectivity_3
+  scroll 6; shot connectivity_4
+  scroll 8; shot connectivity_5
+  xdotool mousemove 95 326 click 1; sleep 3; shot schools
+  xdotool mousemove 600 400 click 1; sleep 4; shot school_record
+  scroll 4; shot school_record_2
+  scroll 6; shot school_record_3
+  scroll 6; shot school_record_4
+  scroll 8; shot school_record_5
+  xdotool mousemove 95 370 click 1; sleep 3; shot plants
+  xdotool mousemove 500 330 click 1; sleep 4; shot plant_detail
+  scroll 4; shot plant_detail_2
+  scroll 6; shot plant_detail_3
+  scroll 6; shot plant_detail_4
+  scroll 8; shot plant_detail_5
+  xdotool mousemove 95 414 click 1; shot alarms
+  xdotool mousemove 95 458 click 1; sleep 4; shot map
   xdotool mousemove 305 102 click 1; sleep 4; shot map_schools
-  xdotool mousemove 95 414 click 1; shot settings
+  xdotool mousemove 470 102 click 1; sleep 3; shot map_connectivity
+  xdotool mousemove 95 502 click 1; shot settings
   scroll 8; shot settings_2
   kill $APP
 '
