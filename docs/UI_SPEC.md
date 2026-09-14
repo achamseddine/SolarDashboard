@@ -139,6 +139,15 @@ share), the solar × internet matrix as four tiles and a donut, districts with t
 best served, and monitored plants at schools without a data path. Every tile deep-links into the
 directory with the matching filter.
 
+### Students and teachers (`/education`)
+Student attendance per shift (mean over schools and weighted by students), attendance submission
+counts, second-shift schools, and the morning/afternoon risk ratings with the unrated remainder made
+explicit. Teacher section: headcount, gender split, students per teacher, teaching days, third-party
+verification visits, high-risk records, the four per-term attendance-reporting bars and the teacher
+risk rating. A governorate card stacks morning-only against second-shift schools and tabulates the
+attendance means. Mirrors the MEHE education dashboard; the "10+ days of non-justified absences"
+columns are empty in the bundled extract, and the page says so rather than showing a zero.
+
 ### Map (`/map`)
 `flutter_map` with OSM tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, userAgentPackageName
 `org.unicef.unicef_solar_monitor`), centred on Lebanon (33.85, 35.85, zoom 8). Draw governorate outlines

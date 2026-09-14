@@ -27,6 +27,7 @@ lib/
       school_insights.dart       SchoolInsights + SchoolInsight + RegionCoverage + ProgrammeSlice + AttendanceComparison
       school_query.dart          SchoolQuery + SchoolSort: filter/sort the whole school directory
       connectivity_insights.dart ConnectivityInsights + ConnectivityGroup + ConnectivityQuadrant
+      education_insights.dart    EducationInsights + EducationRegion (students, teachers, risk ratings)
     db/
       app_database.dart          AppDatabase.open(path) → Database; schema + migrations
       station_dao.dart           stations, station_latest, snapshots, daily/monthly energy, buckets, status events, battery days
@@ -47,6 +48,7 @@ lib/
       fleet_insights_builder.dart  pure functions: build FleetInsights from DB snapshots
       school_insights_builder.dart programme roll-ups: dataset ⋈ links ⋈ FleetInsights
       connectivity_insights_builder.dart internet roll-out per governorate/district and the solar × internet matrix
+      education_insights_builder.dart    SQL aggregates over school_education (attendance, risk, teaching staff)
     schools/
       school_dataset.dart        SchoolDataset (assets/data/schools.json), SchoolDatasetImporter (once per version)
       station_school_linker.dart StationSchoolLinker: plant → CERD by name (transliteration-folded) + coordinates
@@ -62,6 +64,7 @@ lib/
     programme/                   solarisation programme dashboard (coverage, funding, audited loads, education, links)
     schools/                     school directory (every MEHE school) and the per-school record page
     connectivity/                internet-connectivity dashboard (coverage, solar × internet matrix, gaps)
+    education/                   student and teacher indicators (attendance, risk, afternoon-shift staff)
     stations/                    schools list (search/filter/sort) and station detail (flow diagram, charts, devices, alerts)
     alarms/                      alarm centre
     map/                         Lebanon map with status markers (flutter_map, OSM tiles, graceful offline)

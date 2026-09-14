@@ -19,6 +19,7 @@ governorate roll-ups, rankings and environmental impact — all readable offline
 | School record | one page per school whether or not it has a plant: master data (Arabic name, ownership, cadaster, CAS code, address, phone, students AM/PM, capacity, coordinates), internet-connectivity status in the context of its governorate, solar tracker record, energy audit with the equipment inventory, live plant figures when linked, and education indicators |
 | Connectivity | internet roll-out dashboard: connected schools and students reached, coverage per governorate, the solar × internet matrix (solar + internet, solar only, internet only, neither), districts with the largest gap and the best served, and the monitored plants sitting at schools without a data path |
 | Programme | solarisation programme dashboard from the MEHE/UNICEF workbooks: public schools vs solarised vs connected vs monitored (overall and per governorate), pipeline, students benefiting, installed kWp, investment and cost per kWp, funding by donor/project/contractor, audited annual loads by category vs expected and measured generation, undersized systems, next candidates, LED share, education indicators, plant ↔ school link status |
+| Students and teachers | education dashboard from the MEHE extract: attendance by shift (mean and weighted by students), risk ratings, afternoon-shift teaching staff with the gender split, per-term attendance reporting, students per teacher, teaching days, third-party verification visits, and a governorate breakdown |
 | Analytics | schools online/offline/alarm/stale, live PV / load / grid / battery totals, capacity utilisation, today's and 30-day energy, self-sufficiency, availability, CO₂ and diesel avoided, governorate table, attention lists (offline, under-performing, low battery, critical alarms), top/bottom yield rankings, SOC histogram, alarm trends |
 | Plants | searchable, filterable, sortable table of every plant with live values, 7-day specific yield vs governorate peers, availability, alarms, last data, linked CERD, internet connectivity and donor; CSV export |
 | School detail | live power-flow diagram, today's power curve (yesterday as context), 30-day / 12-month energy, battery SOC history, every inverter/battery reading, alarms, status history, plus the linked MEHE school record (students, ownership, connectivity, solar tracker data, audited loads and equipment inventory vs measured generation, attendance and risk) with a manual link picker |
@@ -57,6 +58,14 @@ Notes:
 | Landing dashboard | Landing dashboard (continued) |
 |-------------------|-------------------------------|
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Dashboard 2](docs/screenshots/dashboard_4.png) |
+
+| Internet connectivity | Students and teachers |
+|-----------------------|------------------------|
+| ![Connectivity](docs/screenshots/connectivity.png) | ![Education](docs/screenshots/education.png) |
+
+| Schools directory | School record |
+|-------------------|---------------|
+| ![Schools](docs/screenshots/schools.png) | ![School record](docs/screenshots/school_record.png) |
 
 | Programme (solarisation coverage) | Programme (funding, audited loads) |
 |-----------------------------------|------------------------------------|

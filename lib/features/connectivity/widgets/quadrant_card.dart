@@ -25,8 +25,9 @@ class SolarInternetCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TwoColumn(
-            leftFlex: 3,
-            rightFlex: 2,
+            // Below this width the donut and its legend stack under the
+            // matrix instead of being squeezed next to it.
+            breakpoint: 1150,
             left: Column(
               children: [
                 Row(children: [
@@ -45,7 +46,7 @@ class SolarInternetCard extends StatelessWidget {
             right: Padding(
               padding: const EdgeInsets.only(top: 8),
               child: DonutChart(
-                size: 168,
+                size: 150,
                 centerLabel: 'schools',
                 centerValue: Fmt.int_(d.schools),
                 slices: [for (final q in _order) (q.label, d.quadrant(q).toDouble(), quadrantColor(q))],

@@ -71,7 +71,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   xdotool mousemove 95 458 click 1; shot alarms
   xdotool mousemove 95 502 click 1; sleep 4; shot map
   xdotool mousemove 305 102 click 1; sleep 4; shot map_schools
-  xdotool mousemove 470 102 click 1; sleep 3; shot map_connectivity
+  xdotool mousemove 633 102 click 1; sleep 3; shot map_connectivity
   xdotool mousemove 95 546 click 1; shot settings
   scroll 8; shot settings_2
   kill $APP

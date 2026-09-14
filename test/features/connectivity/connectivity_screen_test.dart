@@ -81,4 +81,55 @@ void main() {
     expect(seen, containsAll(wanted));
     await TestEnv.drain(tester);
   });
+
+  testWidgets('connectivity dashboard survives a narrow tablet', (tester) async {
+    tester.view.physicalSize = const Size(900, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final env = await TestEnv.createFor(tester, schools: 12);
+    addTearDown(() => tester.runAsync(env.dispose));
+
+    await tester.pumpWidget(env.wrap(const ConnectivityScreen(), size: const Size(900, 800)));
+    await TestEnv.settle(tester, rounds: 5);
+    expect(find.text('Internet connectivity'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final list = find.byType(ListView).first;
+    for (var i = 0; i < 16; i++) {
+      await tester.drag(list, const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull, reason: 'layout exception after scroll $i');
+    }
+    await TestEnv.drain(tester);
+  });
+
+  testWidgets('connectivity dashboard survives an empty dataset', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late TestEnv env;
+    await tester.runAsync(() async => env = await TestEnv.create(sync: false, withSchools: false));
+    addTearDown(() => tester.runAsync(env.dispose));
+
+    await tester.pumpWidget(env.wrap(const ConnectivityScreen(), size: const Size(1400, 900)));
+    await TestEnv.settle(tester, rounds: 5);
+
+    expect(find.text('Internet connectivity'), findsOneWidget);
+    expect(find.textContaining('has not been imported yet'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final list = find.byType(ListView).first;
+    final seen = <String>{};
+    const wanted = ['No school dataset imported yet', 'No district in the dataset', 'Plants without a data path'];
+    for (var i = 0; i < 10; i++) {
+      for (final label in wanted) {
+        if (find.textContaining(label).evaluate().isNotEmpty) seen.add(label);
+      }
+      await tester.drag(list, const Offset(0, -500));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull, reason: 'layout exception after scroll $i');
+    }
+    expect(seen, containsAll(wanted));
+    await TestEnv.drain(tester);
+  });
 }
