@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../models/school.dart';
@@ -188,6 +190,92 @@ class SchoolDao {
   Future<Map<String, double>> equipmentByCategory() async {
     final rows = await db.rawQuery('SELECT category, SUM(annual_kwh) AS kwh FROM school_equipment GROUP BY category');
     return {for (final r in rows) r['category'] as String: (r['kwh'] as num?)?.toDouble() ?? 0};
+  }
+
+  // ----------------------------------------------------------- education
+
+  /// One row of student/teacher aggregates. Pass `null` for the fleet.
+  Future<Map<String, Object?>> educationTotals({String? region}) async {
+    final rows = await db.rawQuery('''
+      SELECT
+        COUNT(*) AS schools,
+        SUM(CASE WHEN ed.am_attendance IS NOT NULL THEN 1 ELSE 0 END) AS am_n,
+        AVG(ed.am_attendance) AS am_mean,
+        SUM(ed.am_attendance * COALESCE(s.students_am, s.enrollment, 0)) AS am_weighted,
+        SUM(CASE WHEN ed.am_attendance IS NOT NULL THEN COALESCE(s.students_am, s.enrollment, 0) ELSE 0 END) AS am_students,
+        SUM(CASE WHEN ed.pm_attendance IS NOT NULL THEN 1 ELSE 0 END) AS pm_n,
+        AVG(ed.pm_attendance) AS pm_mean,
+        SUM(ed.pm_attendance * COALESCE(s.students_pm, 0)) AS pm_weighted,
+        SUM(CASE WHEN ed.pm_attendance IS NOT NULL THEN COALESCE(s.students_pm, 0) ELSE 0 END) AS pm_students,
+        SUM(CASE WHEN ed.shift LIKE '%PM%' THEN 1 ELSE 0 END) AS second_shift,
+        SUM(CASE WHEN ed.am_submitted = 1 THEN 1 ELSE 0 END) AS am_submitted,
+        SUM(CASE WHEN ed.pm_submitted = 1 THEN 1 ELSE 0 END) AS pm_submitted,
+        SUM(COALESCE(ed.pm_teachers, 0)) AS teachers,
+        SUM(CASE WHEN ed.pm_teachers IS NOT NULL THEN 1 ELSE 0 END) AS teacher_schools,
+        SUM(COALESCE(ed.pm_female_teachers, 0)) AS female,
+        SUM(COALESCE(ed.pm_male_teachers, 0)) AS male,
+        AVG(ed.student_teacher_ratio) AS ratio,
+        AVG(ed.teaching_days) AS teaching_days,
+        SUM(CASE WHEN ed.visited_third_party = 1 THEN 1 ELSE 0 END) AS visited,
+        SUM(CASE WHEN ed.visited_by_bdo = 1 THEN 1 ELSE 0 END) AS visited_bdo
+      FROM school_education ed
+      JOIN schools s ON s.cerd = ed.cerd
+      WHERE s.in_master = 1${region == null ? '' : ' AND s.region = ?'}''', [?region]);
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Sum of the four teacher-attendance terms (index 0-3), fleet-wide.
+  Future<List<int>> teacherAttendanceTerms() async {
+    final rows = await db.rawQuery('SELECT pm_teacher_terms_json FROM school_education WHERE pm_teacher_terms_json IS NOT NULL');
+    final out = <int>[0, 0, 0, 0];
+    for (final r in rows) {
+      final raw = r['pm_teacher_terms_json'] as String?;
+      if (raw == null) continue;
+      try {
+        final list = jsonDecode(raw);
+        if (list is List) {
+          for (var i = 0; i < out.length && i < list.length; i++) {
+            final v = list[i];
+            if (v is num) out[i] += v.toInt();
+          }
+        }
+      } catch (_) {
+        // A malformed row must not break the dashboard.
+      }
+    }
+    return out;
+  }
+
+  /// Risk-level counts of [column] ('am_risk', 'pm_risk', 'pm_teacher_risk').
+  Future<Map<String, int>> riskCounts(String column) async {
+    assert(column == 'am_risk' || column == 'pm_risk' || column == 'pm_teacher_risk');
+    final rows = await db.rawQuery('SELECT $column AS r, COUNT(*) AS n FROM school_education WHERE $column IS NOT NULL GROUP BY r');
+    return {for (final r in rows) r['r'] as String: (r['n'] as num).toInt()};
+  }
+
+  /// Per-governorate education summary: (region, schools, second-shift schools,
+  /// AM attendance mean, PM attendance mean, teachers).
+  Future<List<(String, int, int, double?, double?, int)>> educationByRegion() async {
+    final rows = await db.rawQuery('''
+      SELECT COALESCE(s.region, 'Unassigned') AS g,
+             COUNT(*) AS n,
+             SUM(CASE WHEN ed.shift LIKE '%PM%' THEN 1 ELSE 0 END) AS pm_n,
+             AVG(ed.am_attendance) AS am_mean,
+             AVG(ed.pm_attendance) AS pm_mean,
+             SUM(COALESCE(ed.pm_teachers, 0)) AS teachers
+      FROM school_education ed JOIN schools s ON s.cerd = ed.cerd
+      WHERE s.in_master = 1 GROUP BY g ORDER BY n DESC''');
+    return [
+      for (final r in rows)
+        (
+          r['g'] as String,
+          (r['n'] as num).toInt(),
+          (r['pm_n'] as num?)?.toInt() ?? 0,
+          (r['am_mean'] as num?)?.toDouble(),
+          (r['pm_mean'] as num?)?.toDouble(),
+          (r['teachers'] as num?)?.toInt() ?? 0,
+        ),
+    ];
   }
 
   // --------------------------------------------------------------- links

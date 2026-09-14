@@ -9,12 +9,14 @@ import 'db/app_database.dart';
 import 'demo/demo_deye_api.dart';
 import 'insights/fleet_insights_builder.dart';
 import 'insights/connectivity_insights_builder.dart';
+import 'insights/education_insights_builder.dart';
 import 'insights/school_insights_builder.dart';
 import 'models/alert.dart';
 import 'models/credentials.dart';
 import 'models/device.dart';
 import 'models/fleet_insights.dart';
 import 'models/connectivity_insights.dart';
+import 'models/education_insights.dart';
 import 'models/school.dart';
 import 'models/school_insights.dart';
 import 'models/school_query.dart';
@@ -188,6 +190,12 @@ final schoolInsightsProvider = FutureProvider<SchoolInsights>((ref) async {
 final connectivityInsightsProvider = FutureProvider<ConnectivityInsights>((ref) async {
   final programme = await ref.watch(schoolInsightsProvider.future);
   return ConnectivityInsightsBuilder(ref.read(databaseProvider)).build(programme);
+});
+
+/// Student and teacher indicators from the MEHE education extract.
+final educationInsightsProvider = FutureProvider<EducationInsights>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  return EducationInsightsBuilder(ref.read(databaseProvider)).build();
 });
 
 /// Every school in the dataset, filtered and sorted for the directory.

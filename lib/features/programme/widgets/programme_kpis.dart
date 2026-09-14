@@ -5,6 +5,7 @@ import '../../../core/models/school_insights.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils/format.dart';
 import '../../common/widgets.dart';
+import '../../dashboard/widgets/dashboard_common.dart';
 import 'programme_common.dart';
 
 /// Hero KPI grid of the programme page.
@@ -29,6 +30,7 @@ class ProgrammeKpiGrid extends StatelessWidget {
           value: Fmt.int_(d.publicSchools),
           icon: Icons.school_outlined,
           hint: '${Fmt.int_(d.students)} students enrolled',
+          onTap: () => goTo(context, '/schools'),
         ),
         KpiTile(
           label: 'Solarised',
@@ -36,6 +38,7 @@ class ProgrammeKpiGrid extends StatelessWidget {
           icon: Icons.solar_power_outlined,
           color: AppColors.good,
           hint: '${Fmt.ratio(d.solarizedShare)} of public schools',
+          onTap: () => goTo(context, '/schools?solar=1'),
         ),
         KpiTile(
           label: 'Solar pipeline',
@@ -50,12 +53,14 @@ class ProgrammeKpiGrid extends StatelessWidget {
           icon: Icons.wifi_outlined,
           color: p.load,
           hint: '${Fmt.ratio(d.connectedShare)} of public schools',
+          onTap: () => goTo(context, '/connectivity'),
         ),
         KpiTile(
           label: 'Solar + connected',
           value: Fmt.int_(d.solarizedConnected),
           icon: Icons.link_outlined,
           hint: '${Fmt.int_(d.solarizedUnconnected)} solarised without connectivity',
+          onTap: () => goTo(context, '/connectivity'),
         ),
         KpiTile(
           label: 'Monitored plants',

@@ -38,6 +38,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   /// Within the school layer: only schools on the connectivity roll-out.
   bool _connectedOnly = false;
 
+  /// Within the school layer: colour by internet connectivity instead of
+  /// solar status, and draw the monitored schools too.
+  bool _connectivity = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -62,11 +66,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         }).toList();
         final noLocation = d.stations.length - all.length;
         // Schools with coordinates that have no monitored plant (those are
-        // already on the map as plant markers). Region filter applies too.
+        // already on the map as plant markers) — in connectivity mode every
+        // located school is drawn, monitored ones included, because the
+        // question is the internet link, not the plant. Region filter applies.
         final schools = <SchoolInsight>[
           if (schoolInsights != null)
             for (final s in schoolInsights.schools)
-              if (s.school.hasLocation && !s.isMonitored && (!_connectedOnly || s.isConnected) && (_region == null || s.region == _region)) s,
+              if (s.school.hasLocation && (_connectivity || !s.isMonitored) && (!_connectedOnly || s.isConnected) && (_region == null || s.region == _region)) s,
         ];
         return Column(
           children: [
@@ -94,7 +100,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     selected: _showSchools,
                     onSelected: (on) => setState(() => _showSchools = on),
                   ),
-                  if (_showSchools)
+                  if (_showSchools) ...[
                     FilterChip(
                       avatar: Icon(Icons.wifi, size: 16, color: _connectedOnly ? AppColors.good : null),
                       label: const Text('Connected only'),
@@ -102,6 +108,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       selected: _connectedOnly,
                       onSelected: (on) => setState(() => _connectedOnly = on),
                     ),
+                    FilterChip(
+                      avatar: Icon(Icons.wifi, size: 16, color: _connectivity ? AppColors.good : null),
+                      label: const Text('Connectivity'),
+                      tooltip: 'Colour every located school by its internet connection instead of its solar status',
+                      selected: _connectivity,
+                      onSelected: (on) => setState(() => _connectivity = on),
+                    ),
+                  ],
                   SizedBox(
                     width: 200,
                     child: DropdownButtonFormField<String?>(
@@ -155,7 +169,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 point: LatLng(s.school.lat!, s.school.lng!),
                                 width: _SchoolDot.hitSize,
                                 height: _SchoolDot.hitSize,
-                                child: _SchoolDot(insight: s, onTap: () => _openSchool(context, s)),
+                                child: _SchoolDot(insight: s, connectivity: _connectivity, onTap: () => _openSchool(context, s)),
                               ),
                           ],
                         ),
@@ -172,7 +186,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                     ],
                   ),
-                  Positioned(right: 12, bottom: 12, child: _Legend(shown: shown, schools: _showSchools ? schools : null, schoolsLoading: _showSchools && schoolInsights == null)),
+                  Positioned(
+                    right: 12,
+                    bottom: 12,
+                    child: _Legend(
+                      shown: shown,
+                      schools: _showSchools ? schools : null,
+                      schoolsLoading: _showSchools && schoolInsights == null,
+                      connectivity: _connectivity,
+                    ),
+                  ),
                   if (!widget.showTiles)
                     Positioned(left: 12, bottom: 12, child: Card(child: Padding(padding: const EdgeInsets.all(8), child: Text('Base map tiles disabled', style: Theme.of(context).textTheme.labelSmall)))),
                 ],
@@ -224,16 +247,23 @@ Color schoolMarkerColor(School school) {
   return _SchoolDot.notSolarized;
 }
 
+/// Colour of a school dot in connectivity mode: on the roll-out list or not.
+Color schoolConnectivityColor(School school) => school.connected ? AppColors.good : _SchoolDot.noInternet;
+
 /// 8 px school dot (white ring = internet-connected) with a slightly larger
 /// tap target. Decorations are shared so 1,250 markers stay cheap.
 class _SchoolDot extends StatelessWidget {
-  const _SchoolDot({required this.insight, required this.onTap});
+  const _SchoolDot({required this.insight, required this.onTap, this.connectivity = false});
   final SchoolInsight insight;
   final VoidCallback onTap;
+
+  /// Colour by internet connection instead of solar status.
+  final bool connectivity;
 
   static const double dotSize = 8;
   static const double hitSize = 14;
   static final Color notSolarized = AppColors.muted.withValues(alpha: 0.7);
+  static final Color noInternet = AppColors.serious.withValues(alpha: 0.75);
 
   static final Map<(Color, bool), BoxDecoration> _decorations = {};
 
@@ -251,7 +281,7 @@ class _SchoolDot extends StatelessWidget {
         child: SizedBox(
           width: dotSize,
           height: dotSize,
-          child: DecoratedBox(decoration: _decoration(schoolMarkerColor(insight.school), insight.isConnected)),
+          child: DecoratedBox(decoration: _decoration(connectivity ? schoolConnectivityColor(insight.school) : schoolMarkerColor(insight.school), insight.isConnected)),
         ),
       ),
     );
@@ -281,12 +311,15 @@ class _StationMarker extends StatelessWidget {
 }
 
 class _Legend extends StatelessWidget {
-  const _Legend({required this.shown, this.schools, this.schoolsLoading = false});
+  const _Legend({required this.shown, this.schools, this.schoolsLoading = false, this.connectivity = false});
   final List<StationInsight> shown;
 
   /// Schools drawn by the school layer (null when the layer is off).
   final List<SchoolInsight>? schools;
   final bool schoolsLoading;
+
+  /// School dots are coloured by internet connection.
+  final bool connectivity;
 
   @override
   Widget build(BuildContext context) {
@@ -319,15 +352,28 @@ class _Legend extends StatelessWidget {
             Text('${Fmt.power(gen)} now · ${Fmt.capacity(kwp)} shown', style: t.labelSmall),
             if (schools != null) ...[
               const Divider(height: 12),
-              Text('Public schools', style: t.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              _LegendDot(color: AppColors.warning, label: 'Solarised, no monitored plant'),
-              _LegendDot(color: AppColors.unicefCyan, label: 'Solar pipeline (planned, on hold, unfunded)'),
-              _LegendDot(color: _SchoolDot.notSolarized, label: 'Not solarised'),
-              _LegendDot(color: _SchoolDot.notSolarized, ring: true, label: 'White ring = internet-connected'),
-              const SizedBox(height: 4),
-              Text(schoolsLoading ? 'Loading schools…' : '${Fmt.int_(schools.length)} schools shown · ${Fmt.int_(schools.where((s) => s.isConnected).length)} connected', style: t.labelSmall),
-              Text('MEHE master list · UNICEF solar tracker · connectivity roll-out', style: muted),
+              if (connectivity) ...[
+                Text('Connectivity', style: t.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                const _LegendDot(color: AppColors.good, label: 'Connected'),
+                _LegendDot(color: _SchoolDot.noInternet, label: 'No internet'),
+                const SizedBox(height: 4),
+                Text(
+                  schoolsLoading ? 'Loading schools…' : '${Fmt.int_(schools.where((s) => s.isConnected).length)} connected of ${Fmt.int_(schools.length)} shown',
+                  style: t.labelSmall,
+                ),
+                Text('MEHE master list · internet-connectivity roll-out', style: muted),
+              ] else ...[
+                Text('Public schools', style: t.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                const _LegendDot(color: AppColors.warning, label: 'Solarised, no monitored plant'),
+                const _LegendDot(color: AppColors.unicefCyan, label: 'Solar pipeline (planned, on hold, unfunded)'),
+                _LegendDot(color: _SchoolDot.notSolarized, label: 'Not solarised'),
+                _LegendDot(color: _SchoolDot.notSolarized, ring: true, label: 'White ring = internet-connected'),
+                const SizedBox(height: 4),
+                Text(schoolsLoading ? 'Loading schools…' : '${Fmt.int_(schools.length)} schools shown · ${Fmt.int_(schools.where((s) => s.isConnected).length)} connected', style: t.labelSmall),
+                Text('MEHE master list · UNICEF solar tracker · connectivity roll-out', style: muted),
+              ],
             ],
           ],
         ),
