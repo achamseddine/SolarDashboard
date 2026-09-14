@@ -25,6 +25,8 @@ lib/
       fleet_insights.dart        FleetInsights + StationInsight + RegionInsight + AlarmInsight
       school.dart                School, SchoolSolar, SchoolLoads, SchoolEquipment, SchoolEducation, StationSchoolLink
       school_insights.dart       SchoolInsights + SchoolInsight + RegionCoverage + ProgrammeSlice + AttendanceComparison
+      school_query.dart          SchoolQuery + SchoolSort: filter/sort the whole school directory
+      connectivity_insights.dart ConnectivityInsights + ConnectivityGroup + ConnectivityQuadrant
     db/
       app_database.dart          AppDatabase.open(path) → Database; schema + migrations
       station_dao.dart           stations, station_latest, snapshots, daily/monthly energy, buckets, status events, battery days
@@ -44,6 +46,7 @@ lib/
     insights/
       fleet_insights_builder.dart  pure functions: build FleetInsights from DB snapshots
       school_insights_builder.dart programme roll-ups: dataset ⋈ links ⋈ FleetInsights
+      connectivity_insights_builder.dart internet roll-out per governorate/district and the solar × internet matrix
     schools/
       school_dataset.dart        SchoolDataset (assets/data/schools.json), SchoolDatasetImporter (once per version)
       station_school_linker.dart StationSchoolLinker: plant → CERD by name (transliteration-folded) + coordinates
@@ -57,6 +60,8 @@ lib/
     shell/app_shell.dart         NavigationRail + content area, sync status bar, offline banner
     dashboard/                   fleet dashboard (KPI tiles, charts, rankings, region table, alarm summary)
     programme/                   solarisation programme dashboard (coverage, funding, audited loads, education, links)
+    schools/                     school directory (every MEHE school) and the per-school record page
+    connectivity/                internet-connectivity dashboard (coverage, solar × internet matrix, gaps)
     stations/                    schools list (search/filter/sort) and station detail (flow diagram, charts, devices, alerts)
     alarms/                      alarm centre
     map/                         Lebanon map with status markers (flutter_map, OSM tiles, graceful offline)
@@ -177,6 +182,16 @@ within 150 m. Close runners-up (schools sharing a compound) block an automatic l
 by hand on the plant page (search by name or CERD, suggestions shown with confidence and distance).
 In demo mode the synthetic plants take the *tracker* names and coordinates of real solarised schools,
 so the matcher is exercised end-to-end (tests require 90 %+ recall and zero wrong links).
+
+### Connectivity insights (`ConnectivityInsightsBuilder`)
+
+The connectivity workbook is a **membership list**: 534 schools are on the internet roll-out, with no
+bandwidth, provider or uptime column. The builder therefore reports coverage rather than quality:
+connected schools and students reached overall, per governorate and per district (SQL aggregates over
+`schools`), the four solar × internet combinations with their school and student counts, the share of
+solarised schools that also have internet, the districts with the largest absolute gap and the best
+served ones, and the monitored plants whose school is not on the list — a solarised school with no
+internet has no data path, which is the most common cause of a plant that never reports.
 
 ### Programme insights (`SchoolInsightsBuilder`)
 

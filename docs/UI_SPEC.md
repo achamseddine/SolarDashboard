@@ -33,6 +33,9 @@ except through those providers (the only on-demand network call is `SyncEngine.r
   (school record + link + linked `StationInsight`). `schoolProfileProvider(stationId)` → linked school
   with equipment inventory; `linkedSchoolsProvider` → station id → `School`; `linkSuggestionsProvider`;
   `schoolDatasetInfoProvider`.
+* `connectivityInsightsProvider` → `ConnectivityInsights`; `schoolDirectoryProvider(SchoolQuery)` →
+  filtered/sorted `List<SchoolInsight>` over every school; `schoolRecordProvider(cerd)` → `SchoolRecord`
+  (school, equipment, programme insight, link); `cazaOptionsProvider(region)`, `ownershipOptionsProvider`.
 * `alertsProvider(AlertFilter)` → `List<SolarAlert>`; `powerBucketsProvider((region, hours))` →
   fleet/region 15-min `PowerBucket`s; `syncStatusProvider`, `syncLogsProvider`, `dbStatsProvider`,
   `settingsProvider`, `credentialsProvider`, `canSyncProvider`, `appLogProvider`, `syncEngineProvider`.
@@ -115,6 +118,26 @@ measured generation (sizing ratio, LED share, top equipment loads), attention li
 monitored, plants down without connectivity, undersized systems, next candidates), measured vs
 audited coverage per monitored school, education indicators (attendance comparisons — descriptive
 only), plant ↔ school link statistics with the unlinked plants. Every card copes with an empty fleet.
+
+### Schools directory (`/schools`)
+Every school in the dataset, not only the monitored plants. Search (name, Arabic name, CERD, district,
+cadaster, address), governorate and district dropdowns, ownership dropdown, and chips for internet /
+no internet, solarised / not solarised, monitored plant, energy audit and second shift. Sortable table:
+school, CERD, governorate, district, internet icon, solar status pill, kWp, students, audited load,
+attendance, plant. Row opens the school record; the plant cell opens the plant. CSV export of the
+filtered rows.
+
+### School record (`/schools/:cerd`)
+One school: chips for internet, solar status, monitoring and second shift; KPI tiles (students,
+capacity, kWp, audited load, expected generation, attendance); master-data card; connectivity card with
+the governorate's share; solar tracker card; energy audit with the equipment inventory; live plant card
+when a plant is linked; education indicators. Works for schools with no plant and no solar record.
+
+### Connectivity (`/connectivity`)
+Internet roll-out: connected schools and students reached, coverage per governorate (stacked bars plus
+share), the solar × internet matrix as four tiles and a donut, districts with the largest gap and the
+best served, and monitored plants at schools without a data path. Every tile deep-links into the
+directory with the matching filter.
 
 ### Map (`/map`)
 `flutter_map` with OSM tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, userAgentPackageName
