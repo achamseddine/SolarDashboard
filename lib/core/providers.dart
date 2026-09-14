@@ -8,13 +8,16 @@ import 'api/deye_api_client.dart';
 import 'db/app_database.dart';
 import 'demo/demo_deye_api.dart';
 import 'insights/fleet_insights_builder.dart';
+import 'insights/connectivity_insights_builder.dart';
 import 'insights/school_insights_builder.dart';
 import 'models/alert.dart';
 import 'models/credentials.dart';
 import 'models/device.dart';
 import 'models/fleet_insights.dart';
+import 'models/connectivity_insights.dart';
 import 'models/school.dart';
 import 'models/school_insights.dart';
+import 'models/school_query.dart';
 import 'models/station.dart';
 import 'models/sync.dart';
 import 'schools/school_dataset.dart';
@@ -179,6 +182,60 @@ final schoolInsightsProvider = FutureProvider<SchoolInsights>((ref) async {
   final fleet = await ref.watch(fleetInsightsProvider.future);
   final settings = ref.watch(settingsProvider);
   return SchoolInsightsBuilder(ref.read(databaseProvider)).build(settings, fleet);
+});
+
+/// Internet-connectivity roll-out joined with the solar programme.
+final connectivityInsightsProvider = FutureProvider<ConnectivityInsights>((ref) async {
+  final programme = await ref.watch(schoolInsightsProvider.future);
+  return ConnectivityInsightsBuilder(ref.read(databaseProvider)).build(programme);
+});
+
+/// Every school in the dataset, filtered and sorted for the directory.
+final schoolDirectoryProvider = FutureProvider.autoDispose.family<List<SchoolInsight>, SchoolQuery>((ref, query) async {
+  final programme = await ref.watch(schoolInsightsProvider.future);
+  return query.apply(programme.schools);
+});
+
+/// Districts (caza) available in the directory filter, with school counts.
+final cazaOptionsProvider = FutureProvider.autoDispose.family<List<(String, int)>, String?>((ref, region) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  return ref.read(databaseProvider).schools.cazaCounts(region: region);
+});
+
+/// Ownership values available in the directory filter, with school counts.
+final ownershipOptionsProvider = FutureProvider.autoDispose<List<(String, int)>>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  return ref.read(databaseProvider).schools.ownershipCounts();
+});
+
+/// One school record, whether or not it has a monitored plant.
+class SchoolRecord {
+  const SchoolRecord({required this.school, required this.equipment, this.insight, this.link});
+  final School school;
+  final List<SchoolEquipment> equipment;
+
+  /// Programme insight (expected vs measured generation, plant when linked).
+  final SchoolInsight? insight;
+  final StationSchoolLink? link;
+
+  StationInsight? get station => insight?.station;
+  bool get isMonitored => station != null;
+}
+
+final schoolRecordProvider = FutureProvider.autoDispose.family<SchoolRecord?, int>((ref, cerd) async {
+  ref.watch(dataVersionProvider(DataKind.schools));
+  final db = ref.read(databaseProvider);
+  final school = await db.schools.getSchool(cerd);
+  if (school == null) return null;
+  final programme = await ref.watch(schoolInsightsProvider.future);
+  final insight = programme.forCerd(cerd);
+  final links = await db.schools.linksForSchool(cerd);
+  return SchoolRecord(
+    school: school,
+    equipment: await db.schools.equipmentFor(cerd),
+    insight: insight,
+    link: insight?.link ?? (links.isEmpty ? null : links.first),
+  );
 });
 
 /// Station id → linked school (for list/map decorations).

@@ -68,9 +68,12 @@ class SchoolDao {
 
   Future<List<School>> getSchools({
     String? region,
+    String? caza,
+    String? ownership,
     bool? connected,
     SolarStatus? solarStatus,
     bool? solarized,
+    bool? hasAudit,
     String? search,
     bool masterOnly = false,
   }) async {
@@ -79,6 +82,14 @@ class SchoolDao {
     if (region != null) {
       where.add('s.region = ?');
       args.add(region);
+    }
+    if (caza != null) {
+      where.add('s.caza = ?');
+      args.add(caza);
+    }
+    if (ownership != null) {
+      where.add('s.ownership = ?');
+      args.add(ownership);
     }
     if (connected != null) {
       where.add('s.connected = ?');
@@ -91,14 +102,56 @@ class SchoolDao {
     if (solarized != null) {
       where.add(solarized ? "so.status = 'completed'" : "(so.status IS NULL OR so.status <> 'completed')");
     }
+    if (hasAudit != null) {
+      const sum = 'COALESCE(ld.lighting_kwh,0) + COALESCE(ld.hvac_kwh,0) + COALESCE(ld.it_kwh,0) + COALESCE(ld.misc_kwh,0)';
+      where.add(hasAudit ? '($sum) > 0' : '(ld.cerd IS NULL OR ($sum) <= 0)');
+    }
     if (masterOnly) where.add('s.in_master = 1');
     if (search != null && search.trim().isNotEmpty) {
       final q = '%${search.trim()}%';
-      where.add('(s.name LIKE ? OR s.name_ar LIKE ? OR so.listed_name LIKE ? OR CAST(s.cerd AS TEXT) LIKE ? OR s.caza LIKE ?)');
-      args.addAll([q, q, q, q, q]);
+      where.add('(s.name LIKE ? OR s.name_ar LIKE ? OR so.listed_name LIKE ? OR CAST(s.cerd AS TEXT) LIKE ? OR s.caza LIKE ? OR s.cadaster LIKE ? OR s.address LIKE ?)');
+      args.addAll([q, q, q, q, q, q, q]);
     }
     final rows = await db.rawQuery('$_select ${where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}'} ORDER BY s.name', args);
     return rows.map(School.fromRow).toList();
+  }
+
+  /// Distinct cazas (districts) present in the dataset, with school counts.
+  Future<List<(String, int)>> cazaCounts({String? region}) async {
+    final rows = await db.rawQuery(
+      'SELECT caza, COUNT(*) AS n FROM schools WHERE caza IS NOT NULL${region == null ? '' : ' AND region = ?'} GROUP BY caza ORDER BY caza',
+      [?region],
+    );
+    return [for (final r in rows) (r['caza'] as String, (r['n'] as num).toInt())];
+  }
+
+  /// Distinct ownership values with school counts.
+  Future<List<(String, int)>> ownershipCounts() async {
+    final rows = await db.rawQuery('SELECT ownership, COUNT(*) AS n FROM schools WHERE ownership IS NOT NULL GROUP BY ownership ORDER BY n DESC');
+    return [for (final r in rows) (r['ownership'] as String, (r['n'] as num).toInt())];
+  }
+
+  /// Internet-connectivity counts grouped by [column] ('region' or 'caza'):
+  /// (group, schools, connected, students, connected students).
+  Future<List<(String, int, int, int, int)>> connectivityBy(String column) async {
+    assert(column == 'region' || column == 'caza');
+    final rows = await db.rawQuery('''
+      SELECT COALESCE($column, 'Unassigned') AS g,
+             COUNT(*) AS n,
+             SUM(connected) AS c,
+             SUM(COALESCE(enrollment, 0)) AS st,
+             SUM(CASE WHEN connected = 1 THEN COALESCE(enrollment, 0) ELSE 0 END) AS cst
+      FROM schools WHERE in_master = 1 GROUP BY g ORDER BY n DESC''');
+    return [
+      for (final r in rows)
+        (
+          r['g'] as String,
+          (r['n'] as num).toInt(),
+          (r['c'] as num?)?.toInt() ?? 0,
+          (r['st'] as num?)?.toInt() ?? 0,
+          (r['cst'] as num?)?.toInt() ?? 0,
+        ),
+    ];
   }
 
   Future<School?> getSchool(int cerd) async {
