@@ -40,22 +40,29 @@ jobs:
       # already on the tablet. Without these secrets Gradle falls back to a
       # debug key that each runner generates for itself, and Android rejects
       # the upgrade with "App not installed".
+      # The secrets context is not dependable in a step-level `if`, so the step
+      # always runs and decides for itself; a repository without the key still
+      # builds, just with the debug key.
       - name: Write the release signing key
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with Gradle's debug key, so this APK cannot be installed over an earlier build."
+            exit 0
+          fi
           umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           {
             echo "storeFile=$RUNNER_TEMP/release.jks"
             echo "storePassword=$STORE_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
             echo "keyPassword=$KEY_PASSWORD"
           } > android/key.properties
+          echo "Release key in place."
       # The build number becomes the versionCode, so each release supersedes
       # the last instead of every build claiming to be version 1.
       - run: flutter build apk --release --build-number=${{ github.run_number }}
