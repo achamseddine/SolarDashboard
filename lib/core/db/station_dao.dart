@@ -264,6 +264,27 @@ class StationDao {
   }
 
   /// Number of snapshots per station within a time range.
+  /// Mean generation (W) per hour of the local day for every station, as a
+  /// compact trend series. One query for the whole fleet — the plants list
+  /// draws 200+ sparklines and cannot afford a query per row.
+  Future<Map<int, List<double>>> generationTrends(int fromTs, int toTs, {int buckets = 24}) async {
+    final span = (toTs - fromTs).clamp(1, 86400 * 2);
+    final width = (span / buckets).ceil().clamp(1, span);
+    final rows = await db.rawQuery('''
+      SELECT station_id, ((ts - ?) / ?) AS b, AVG(generation_w) AS w
+      FROM station_snapshots
+      WHERE ts >= ? AND ts <= ? AND generation_w IS NOT NULL
+      GROUP BY station_id, b ORDER BY station_id, b''', [fromTs, width, fromTs, toTs]);
+    final out = <int, List<double>>{};
+    for (final r in rows) {
+      final id = (r['station_id'] as num).toInt();
+      final b = ((r['b'] as num?)?.toInt() ?? 0).clamp(0, buckets - 1);
+      final list = out.putIfAbsent(id, () => List<double>.filled(buckets, 0));
+      list[b] = (r['w'] as num?)?.toDouble() ?? 0;
+    }
+    return out;
+  }
+
   Future<Map<int, int>> snapshotCounts(int fromTs, int toTs) async {
     final rows = await db.rawQuery('SELECT station_id, COUNT(*) n FROM station_snapshots WHERE ts >= ? AND ts <= ? GROUP BY station_id', [fromTs, toTs]);
     return {for (final r in rows) r['station_id'] as int: asInt(r['n']) ?? 0};

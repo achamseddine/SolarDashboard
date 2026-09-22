@@ -16,7 +16,7 @@ class DemoDeyeApi implements DeyeApi {
   /// [seeds] (real solarised schools from the bundled dataset) give the
   /// synthetic plants real names, coordinates and sizes so the plant ↔ school
   /// linking works in demo mode; without seeds, generic towns are used.
-  DemoDeyeApi({int seed = 7, DateTime Function()? clock, this.latency = const Duration(milliseconds: 15), int schools = 60, List<DemoSeed> seeds = const []})
+  DemoDeyeApi({int seed = 7, DateTime Function()? clock, this.latency = const Duration(milliseconds: 15), int schools = 219, List<DemoSeed> seeds = const []})
       : _clock = clock ?? DateTime.now,
         seeds = List.unmodifiable(seeds) {
     final picked = _pickSeeds(seeds, schools);
@@ -80,8 +80,8 @@ class DemoDeyeApi implements DeyeApi {
           'id': s.id,
           'name': s.name,
           'locationAddress': s.address,
-          'locationLat': s.lat,
-          'locationLng': s.lng,
+          'locationLat': s.noLocation ? null : s.lat,
+          'locationLng': s.noLocation ? null : s.lng,
           'regionTimezone': 'Asia/Beirut',
           'gridInterconnectionType': 'BATTERY_BACKUP',
           'installedCapacity': s.kwp,
@@ -370,6 +370,9 @@ class DemoDeyeApi implements DeyeApi {
         address: seedSchool != null ? '${seedSchool.address}, Lebanon' : '${t.$1}, ${t.$2}, Lebanon',
         lat: seedSchool?.lat != null ? seedSchool!.lat + jitter : t.$3 + (rnd.nextDouble() - 0.5) * 0.01,
         lng: seedSchool?.lng != null ? seedSchool!.lng + jitter : t.$4 + (rnd.nextDouble() - 0.5) * 0.01,
+        // Every 37th plant is registered without coordinates, so the plant
+        // list has to cope with a plant that has no place on the map.
+        noLocation: i % 37 == 36,
         kwp: kwp,
         inverters: inverters,
         batteryModules: modules,
@@ -412,6 +415,7 @@ class _School {
     required this.address,
     required this.lat,
     required this.lng,
+    this.noLocation = false,
     required this.kwp,
     required this.inverters,
     required this.batteryModules,
@@ -432,6 +436,10 @@ class _School {
   final String address;
   final double lat;
   final double lng;
+
+  /// Registered without a location: the plant still has to appear in the
+  /// plant list (the cloud console shows it, the app must too).
+  final bool noLocation;
   final double kwp;
   final int inverters;
   final int batteryModules;

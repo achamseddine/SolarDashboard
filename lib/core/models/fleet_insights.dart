@@ -36,6 +36,9 @@ class StationInsight {
     this.daysWithData7d = 0,
     this.gridHoursToday,
     this.lastError,
+    this.devices = 0,
+    this.devicesOffline = 0,
+    this.trend = const [],
   });
 
   final Station station;
@@ -88,6 +91,17 @@ class StationInsight {
   /// Hours today with grid voltage/frequency present (EDL availability).
   final double? gridHoursToday;
   final String? lastError;
+
+  /// Devices known for this plant, and how many report offline.
+  final int devices;
+  final int devicesOffline;
+
+  /// Today's generation curve (mean W per hour), for the list sparkline.
+  final List<double> trend;
+
+  /// Some devices offline while the plant itself still reports — what the
+  /// DeyeCloud console calls "partial offline".
+  bool get isPartiallyOffline => devicesOffline > 0 && devicesOffline < devices && !status.isDown;
 
   int get id => station.id;
   String get name => station.name;
@@ -240,6 +254,16 @@ class FleetInsights {
   int get activeAlerts => activeAlertsByLevel.values.fold(0, (a, b) => a + b);
 
   // Environmental (self-consumed generation only).
+  /// Plants reporting but with at least one device offline.
+  int get partiallyOffline => stations.where((s) => s.isPartiallyOffline).length;
+
+  /// Plants with at least one active alarm, and those with none.
+  int get withAlerts => stations.where((s) => s.activeAlerts > 0).length;
+  int get withoutAlerts => stations.length - withAlerts;
+
+  /// Generation of the current calendar month (kWh), from the monthly series.
+  double get monthGenerationKwh => monthlySeries12m.isEmpty ? 0 : monthlySeries12m.last.generationKwh;
+
   double get co2AvoidedTodayKg => today.selfConsumedKwh * co2FactorKgPerKwh;
   double get co2Avoided30dKg => last30d.selfConsumedKwh * co2FactorKgPerKwh;
   double get co2AvoidedLifetimeKg => lifetime.selfConsumedKwh * co2FactorKgPerKwh;

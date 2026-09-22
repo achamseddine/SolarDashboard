@@ -86,6 +86,21 @@ class DeviceDao {
     return out;
   }
 
+  /// Per-station device counts: (total, offline) over non-archived devices.
+  /// A station whose plant is online while some of its devices are offline is
+  /// "partially offline" — the same status the DeyeCloud console shows.
+  Future<Map<int, (int, int)>> deviceHealthPerStation() async {
+    final rows = await db.rawQuery('''
+      SELECT station_id,
+             COUNT(*) AS n,
+             SUM(CASE WHEN UPPER(COALESCE(connect_status, '')) IN ('OFFLINE', '3', 'DISCONNECTED') THEN 1 ELSE 0 END) AS off
+      FROM devices WHERE archived = 0 AND station_id IS NOT NULL GROUP BY station_id''');
+    return {
+      for (final r in rows)
+        (r['station_id'] as num).toInt(): ((r['n'] as num).toInt(), (r['off'] as num?)?.toInt() ?? 0),
+    };
+  }
+
   /// Stores `/device/latest` results: the full reading set in `device_latest`
   /// (replaced), status/collection time on `devices`, and one whitelisted
   /// numeric sample per device in `device_samples` (ignored when the

@@ -40,6 +40,8 @@ class FleetInsightsBuilder {
     final batteryToday = await db.stations.batteryDayForAll(today);
     final statusEvents30 = await db.stations.statusEventsBetween(nowTs - 30 * 86400, nowTs);
     final gridHours = await _gridHoursToday(nowTs);
+    final deviceHealth = await db.devices.deviceHealthPerStation();
+    final trends = await db.stations.generationTrends(AppTime.dayStart(today), nowTs);
 
     // Availability per station from status events.
     final avail7 = <int, double>{};
@@ -85,7 +87,11 @@ class FleetInsightsBuilder {
       final ev = events[s.id];
       final dataTs = l?.dataTs ?? s.lastUpdateTs;
       final b = batteryToday[s.id];
+      final health = deviceHealth[s.id];
       insights.add(StationInsight(
+        devices: health?.$1 ?? 0,
+        devicesOffline: health?.$2 ?? 0,
+        trend: trends[s.id] ?? const [],
         station: s,
         latest: l,
         status: s.status,
@@ -340,6 +346,9 @@ class FleetInsightsBuilder {
   }
 
   static StationInsight _withPeer(StationInsight i, double? peerMedian) => StationInsight(
+        devices: i.devices,
+        devicesOffline: i.devicesOffline,
+        trend: i.trend,
         station: i.station,
         latest: i.latest,
         status: i.status,
