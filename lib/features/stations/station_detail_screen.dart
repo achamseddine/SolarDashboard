@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/device.dart';
 import '../../core/providers.dart';
+import '../../core/utils/format.dart';
 import '../common/widgets.dart';
 import 'nav.dart';
 import 'widgets/detail_kpis.dart';
@@ -216,7 +217,7 @@ class _PlantInfoTab extends StatelessWidget {
               InfoRow('Coordinates', s.hasLocation ? '${s.lat!.toStringAsFixed(5)}, ${s.lng!.toStringAsFixed(5)}' : 'No location on record'),
               InfoRow('Installed capacity', s.installedCapacityKw == null ? '–' : '${s.installedCapacityKw} kWp'),
               InfoRow('Battery capacity', s.batteryCapacityKwh == null ? '–' : '${s.batteryCapacityKwh} kWh'),
-              InfoRow('Grid type', s.gridType ?? '–'),
+              InfoRow('Grid type', Fmt.label(s.gridType)),
               InfoRow('Owner', s.ownerName ?? '–'),
               InfoRow('Contact', s.contactPhone ?? '–'),
               InfoRow('Time zone', s.timezone ?? '–'),

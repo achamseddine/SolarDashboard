@@ -96,6 +96,18 @@ class Fmt {
     return '${d.inDays} d ago';
   }
 
+  /// The cloud returns enum-ish codes such as `BATTERY_BACKUP` or
+  /// `grid-tied`; render them as ordinary words rather than raw constants.
+  static String label(String? v) {
+    final t = (v ?? '').trim();
+    if (t.isEmpty) return '–';
+    // Leave names that already read as prose (mixed case, spaces) alone.
+    if (t != t.toUpperCase() && t.contains(' ')) return t;
+    final words = t.replaceAll(RegExp(r'[_-]+'), ' ').trim().toLowerCase();
+    if (words.isEmpty) return '–';
+    return words[0].toUpperCase() + words.substring(1);
+  }
+
   static String duration(Duration? d) {
     if (d == null) return '–';
     if (d.inSeconds < 60) return '${d.inSeconds} s';

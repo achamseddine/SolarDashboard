@@ -269,7 +269,11 @@ class EnergyBarChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 56,
-                      getTitlesWidget: (v, meta) => v == meta.max ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(right: 6), child: Text(fmt(signed ? v.abs() : v), style: c.tick, textAlign: TextAlign.right)),
+                      // The bounds sit a hair outside the last gridline, so
+                      // labelling them would overprint the tick next to them.
+                      getTitlesWidget: (v, meta) => v == meta.max || (signed && v == meta.min)
+                          ? const SizedBox.shrink()
+                          : Padding(padding: const EdgeInsets.only(right: 6), child: Text(fmt(signed ? v.abs() : v), style: c.tick, textAlign: TextAlign.right)),
                     ),
                   ),
                   bottomTitles: AxisTitles(

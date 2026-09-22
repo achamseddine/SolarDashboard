@@ -65,11 +65,20 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   xdotool mousemove 95 414 click 1; sleep 4; shot plants
   scroll 5; shot plants_2
   scroll 6; shot plants_3
-  xdotool mousemove 500 430 click 1; sleep 4; shot plant_detail
+  # The first row of the plant table; the pinned pager keeps it at y=500.
+  xdotool mousemove 400 500 click 1; sleep 5; shot plant_detail
   scroll 4; shot plant_detail_2
   scroll 6; shot plant_detail_3
   scroll 6; shot plant_detail_4
   scroll 8; shot plant_detail_5
+  scroll 8; shot plant_detail_6
+  scroll 8; shot plant_detail_7
+  scroll 8; shot plant_detail_8
+  # The plant page tabs sit above the scrolling body, at y=181.
+  xdotool mousemove 333 181 click 1; sleep 3; shot plant_devices
+  xdotool mousemove 414 181 click 1; sleep 3; shot plant_alerts
+  xdotool mousemove 499 181 click 1; sleep 3; shot plant_info
+  scroll 5; shot plant_info_2
   xdotool mousemove 95 458 click 1; shot alarms
   xdotool mousemove 95 502 click 1; sleep 4; shot map
   xdotool mousemove 305 102 click 1; sleep 4; shot map_schools

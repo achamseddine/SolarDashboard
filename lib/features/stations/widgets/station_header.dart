@@ -43,7 +43,7 @@ class StationHeader extends StatelessWidget {
       'Last update ${Fmt.dateTime(lastUpdateTs ?? station.lastUpdateTs)}',
       'Battery ${station.batteryCapacityKwh == null ? '–' : Fmt.energy(station.batteryCapacityKwh)}',
       'Commissioned ${Fmt.date(station.startOperatingTs ?? station.createdTs)}',
-      'Grid ${station.gridType ?? '–'}',
+      'Grid ${Fmt.label(station.gridType)}',
       'Plant id ${station.id}',
       if (station.hasLocation) '${station.lat!.toStringAsFixed(4)}, ${station.lng!.toStringAsFixed(4)}',
     ];
