@@ -54,6 +54,35 @@ Notes:
   icon-font subset is regenerated on a clean build) or pass `--no-tree-shake-icons`.
 * The CI workflow in `.github/workflows/ci.yml` runs analyzer + tests and uploads a release APK.
 
+## Installing on a tablet
+
+Download the APK from the [latest release](../../releases/latest): `unicef-school-solar-arm64.apk`
+for a modern 64-bit tablet, `unicef-school-solar-armv7.apk` for an older 32-bit one, or the larger
+universal `unicef-school-solar.apk` if you are not sure which. Android 7.0 (API 24) or newer, with
+"install unknown apps" allowed for the browser or file manager you install from.
+
+If Android refuses with **"App not installed"**, the copy already on the tablet was signed with a
+different key than the new APK. Uninstall the old copy and install again. That clears the local
+cache and the stored DeyeCloud credentials, so re-enter them in Settings afterwards; nothing is
+lost, as the fleet history is re-synced from the cloud.
+
+### Release signing
+
+Release builds are signed with the key in `android/key.properties`, which is git-ignored and never
+committed. Without it Gradle falls back to its debug key — and because every machine and every CI
+runner generates its own debug key, two builds signed that way cannot be installed over each other.
+To give the repository one stable key, create it once:
+
+```bash
+keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias upload
+base64 -w0 release.jks          # paste the output into the secret below
+```
+
+Then add four repository secrets (Settings → Secrets and variables → Actions):
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+CI writes `android/key.properties` from them before building. Keep `release.jks` somewhere safe and
+off the repository: losing it means every tablet has to uninstall and reinstall again.
+
 ## Screenshots (demo mode, Linux desktop build)
 
 | Landing dashboard | Landing dashboard (continued) |
