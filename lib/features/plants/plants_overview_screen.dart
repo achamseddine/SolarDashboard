@@ -150,19 +150,25 @@ class _PlantsOverviewScreenState extends ConsumerState<PlantsOverviewScreen> {
                   _update(PlantQuery(sort: _query.sort, ascending: _query.ascending, pageSize: _query.pageSize));
                 },
               ),
-              const SizedBox(height: 8),
-              PlantPager(
-                page: page,
-                pageSize: _query.pageSize,
-                onPageSize: (size) => _update(_query.copyWith(pageSize: size, allRows: size == null, page: 0)),
-                onPage: (p) => _update(_query.copyWith(page: p)),
-              ),
               MutedNote(
                 'Every plant of the DeyeCloud account is listed here, whatever the type of location: plants are never hidden because they have no governorate, '
                 'no address or no linked school — a plant without a governorate shows "Unassigned". '
                 'Source: the DeyeCloud account, last synced ${sync.lastSuccessAt == null ? 'never' : Fmt.ago(sync.lastSuccessAt!.millisecondsSinceEpoch ~/ 1000)}.',
               ),
             ],
+          ),
+        ),
+        // The pager stays pinned under the table: the table scrolls inside
+        // its own card, so a pager placed after it would sit below the fold
+        // on a tablet and be reachable only by scrolling past every row.
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: PlantPager(
+            page: page,
+            pageSize: _query.pageSize,
+            onPageSize: (size) => _update(_query.copyWith(pageSize: size, allRows: size == null, page: 0)),
+            onPage: (p) => _update(_query.copyWith(page: p)),
           ),
         ),
       ],

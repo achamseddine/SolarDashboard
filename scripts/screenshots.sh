@@ -23,7 +23,7 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   APP=$!
   sleep 45
   shot() { sleep 3; xwd -root -silent | convert xwd:- -crop 1280x720+0+0 +repage "$OUT/$1$SUFFIX.png"; }
-  scroll() { xdotool mousemove 200 600; for i in $(seq 1 "$1"); do xdotool click 5; done; }
+  scroll() { xdotool mousemove 1270 400; for i in $(seq 1 "$1"); do xdotool click 5; done; }
   # Navigation rail items (x=95 in the extended rail).
   # Rail rows: dashboard 150, analytics 194, programme 238, connectivity 282,
   #            education 326, schools 370, plants 414, alarms 458, map 502, settings 546.
