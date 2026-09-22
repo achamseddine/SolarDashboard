@@ -11,6 +11,7 @@ import 'features/education/education_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/map/map_screen.dart';
 import 'features/overview/overview_screen.dart';
+import 'features/plants/plants_overview_screen.dart';
 import 'features/programme/programme_screen.dart';
 import 'features/schools/school_record_screen.dart';
 import 'features/schools/schools_directory_screen.dart';
@@ -35,6 +36,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/analytics', pageBuilder: (c, s) => const NoTransitionPage(child: DashboardScreen())),
           GoRoute(path: '/programme', pageBuilder: (c, s) => const NoTransitionPage(child: ProgrammeScreen())),
           GoRoute(path: '/connectivity', pageBuilder: (c, s) => const NoTransitionPage(child: ConnectivityScreen())),
+          GoRoute(
+            path: '/plants',
+            pageBuilder: (c, s) => NoTransitionPage(
+              child: PlantsOverviewScreen(
+                initialQuery: s.uri.queryParameters['q'],
+                initialStatus: s.uri.queryParameters['status'],
+                initialFilter: s.uri.queryParameters['filter'],
+              ),
+            ),
+          ),
           GoRoute(path: '/education', pageBuilder: (c, s) => const NoTransitionPage(child: EducationScreen())),
           GoRoute(
             path: '/schools',

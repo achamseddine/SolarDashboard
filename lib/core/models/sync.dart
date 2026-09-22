@@ -35,6 +35,7 @@ class SyncStatus {
     this.pausedUntil,
     this.alertsUnsupportedReason,
     this.stationsSynced = 0,
+    this.truncation,
   });
 
   final SyncPhase phase;
@@ -54,6 +55,13 @@ class SyncStatus {
   /// Non-null when the cloud alert endpoints could not be resolved.
   final String? alertsUnsupportedReason;
   final int stationsSynced;
+
+  /// Non-null when the last plant fetch came back short of what the cloud
+  /// reported, e.g. `DeyeCloud reported 219 plants, 20 were fetched`. The UI
+  /// shows it so a truncated fleet is never mistaken for the real one.
+  final String? truncation;
+
+  bool get isTruncated => truncation != null;
 
   double? get progress => total <= 0 ? null : (current / total).clamp(0, 1);
 
@@ -75,6 +83,8 @@ class SyncStatus {
     String? alertsUnsupportedReason,
     bool clearAlertsUnsupported = false,
     int? stationsSynced,
+    String? truncation,
+    bool clearTruncation = false,
   }) =>
       SyncStatus(
         phase: phase ?? this.phase,
@@ -90,6 +100,7 @@ class SyncStatus {
         pausedUntil: clearPaused ? null : (pausedUntil ?? this.pausedUntil),
         alertsUnsupportedReason: clearAlertsUnsupported ? null : (alertsUnsupportedReason ?? this.alertsUnsupportedReason),
         stationsSynced: stationsSynced ?? this.stationsSynced,
+        truncation: clearTruncation ? null : (truncation ?? this.truncation),
       );
 }
 

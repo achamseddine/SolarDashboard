@@ -33,6 +33,56 @@ class MemoryTokenCache implements TokenCache {
   Future<void> clear() async => _token = null;
 }
 
+/// What a paged list call actually brought back.
+///
+/// [total] is the row count the cloud claimed; [received] is what the client
+/// managed to collect. They differ when the backend caps a list, refuses to
+/// advance past the first page under every paging spelling, or simply stops
+/// answering — cases the UI must warn about rather than silently show a
+/// shorter fleet.
+class ListFetchReport {
+  const ListFetchReport({
+    required this.path,
+    required this.received,
+    required this.spelling,
+    this.total,
+  });
+
+  final String path;
+  final int received;
+
+  /// Row count reported by the server, when it reported one.
+  final int? total;
+
+  /// Paging parameter naming that produced [received] (for logs/diagnostics).
+  final String spelling;
+
+  bool get truncated => total != null && received < total!;
+
+  /// Human-readable shortfall, e.g. `DeyeCloud reported 219 plants, 20 were
+  /// fetched`. Null when nothing was lost.
+  String? message(String noun) => truncated ? 'DeyeCloud reported $total $noun, $received were fetched' : null;
+
+  @override
+  String toString() => '$path: received $received of ${total ?? received} items (paging: $spelling)';
+}
+
+/// One listing attempt with a single paging spelling.
+class _ListAttempt {
+  _ListAttempt({required this.items, required this.total, required this.spelling, required this.stalled});
+
+  final List<Map<String, Object?>> items;
+  final int? total;
+  final PagingSpelling spelling;
+
+  /// True when a page repeated rows the client already had while the server
+  /// still claimed more existed.
+  final bool stalled;
+
+  /// Nothing is missing: either the server never gave a total, or we got it all.
+  bool get isComplete => total == null || items.length >= total!;
+}
+
 /// Optional overrides for the alert endpoints (Settings → Advanced).
 class AlertEndpointConfig {
   const AlertEndpointConfig({this.stationPath, this.devicePath});
@@ -87,6 +137,13 @@ class DeyeApiClient implements DeyeApi {
   String? _alertsUnsupportedReason;
   DateTime? _backoffUntil;
 
+  /// Paging spelling that was proven to work, per list path (index into
+  /// [DeyeEndpoints.pagingSpellings]). Probing happens once per client.
+  final Map<String, int> _pagingSpelling = {};
+
+  /// Result of the most recent paged call, per list path.
+  final Map<String, ListFetchReport> _listReports = {};
+
   /// Token lifetime assumed when the server does not say (24 h).
   static const Duration defaultTokenLifetime = Duration(hours: 24);
 
@@ -114,6 +171,23 @@ class DeyeApiClient implements DeyeApi {
 
   /// When non-null the client is pausing all requests until this time.
   DateTime? get backoffUntil => _backoffUntil;
+
+  /// Diagnostics of the last paged call on [path] (null before the first one).
+  ListFetchReport? listReport(String path) => _listReports[path];
+
+  /// Diagnostics of the last [listStations] sweep: how many plants the cloud
+  /// said it had versus how many were actually fetched.
+  ListFetchReport? get lastStationListReport => _listReports[DeyeEndpoints.stationList];
+
+  /// Plant count reported by the cloud during the last [listStations], or null
+  /// when the server did not say.
+  int? get lastListTotal => lastStationListReport?.total;
+
+  /// Paging spelling proven to work for [path], once one has been found.
+  String? resolvedPagingSpelling(String path) {
+    final i = _pagingSpelling[path];
+    return i == null ? null : DeyeEndpoints.pagingSpellings[i].label;
+  }
 
   /// Lets the alert probe run again (e.g. after the user edited the paths).
   void resetAlertProbe({String? stationPath, String? devicePath}) {
@@ -261,9 +335,17 @@ class DeyeApiClient implements DeyeApi {
     });
   }
 
-  /// Generic pagination: stops when `total` is reached, on an empty page, or
-  /// when a page adds no new ids. Honours the page size the server actually
-  /// returned.
+  /// Generic pagination that refuses to truncate silently.
+  ///
+  /// DeyeCloud installations disagree on how a page is requested, and a server
+  /// that does not recognise our parameters simply keeps answering with the
+  /// first page. The old "stop when a page adds no new ids" rule turned that
+  /// into a fleet of 20 plants out of 219. So: when a page adds nothing while
+  /// the reported `total` is still larger, the listing is restarted with the
+  /// next spelling in [DeyeEndpoints.pagingSpellings]; the first spelling that
+  /// reaches `total` is cached per path for the rest of the client's life.
+  /// Whatever happens, the outcome is recorded in [listReport] so the UI can
+  /// say that plants are missing.
   Future<List<Map<String, Object?>>> _paginate(
     String path,
     Map<String, Object?> body,
@@ -272,15 +354,62 @@ class DeyeApiClient implements DeyeApi {
     int size = DeyeEndpoints.pageSize,
     int maxPages = 200,
   }) async {
+    final spellings = DeyeEndpoints.pagingSpellings;
+    final cached = _pagingSpelling[path];
+    final order = <int>[
+      ?cached,
+      for (var i = 0; i < spellings.length; i++)
+        if (i != cached) i,
+    ];
+    _ListAttempt? best;
+    for (final index in order) {
+      final attempt = await _listPages(path, body, listKeys, idOf: idOf, size: size, maxPages: maxPages, spelling: spellings[index]);
+      if (best == null || attempt.items.length > best.items.length) best = attempt;
+      if (attempt.isComplete) {
+        best = attempt;
+        if (_pagingSpelling[path] != index) {
+          _pagingSpelling[path] = index;
+          log?.call('$path: paging advances with ${spellings[index].label}');
+        }
+        break;
+      }
+      if (attempt.stalled) {
+        log?.call('$path: paging stalled at ${attempt.items.length}/${attempt.total} with ${spellings[index].label}');
+      }
+    }
+    final result = best!;
+    final report = ListFetchReport(path: path, received: result.items.length, total: result.total, spelling: result.spelling.label);
+    _listReports[path] = report;
+    log?.call(report.toString());
+    return result.items;
+  }
+
+  /// Walks every page of [path] with one [spelling].
+  Future<_ListAttempt> _listPages(
+    String path,
+    Map<String, Object?> body,
+    List<String> listKeys, {
+    required String Function(Map<String, Object?>) idOf,
+    required int size,
+    required int maxPages,
+    required PagingSpelling spelling,
+  }) async {
     final out = <Map<String, Object?>>[];
     final seen = <String>{};
     int? total;
-    int? serverPageSize;
+    var pageSize = size;
+    var stalled = false;
     for (var page = 1; page <= maxPages; page++) {
-      final json = await post(path, {...body, 'page': page, 'size': size});
+      final json = await post(path, {...body, ...spelling.params(page, pageSize)});
       final items = firstList(json, listKeys);
       total ??= asInt(pick(json, ['total', 'totalCount', 'count']));
-      if (page == 1 && items.isNotEmpty) serverPageSize = items.length;
+      final reported = total;
+      if (page == 1 && items.isNotEmpty && items.length < pageSize && reported != null && reported > items.length) {
+        // The server enforces a smaller page than we asked for; keep paging
+        // with the size it actually gave instead of calling it a short page.
+        log?.call('$path: server capped the page at ${items.length} rows (asked $pageSize)');
+        pageSize = items.length;
+      }
       var added = 0;
       for (final it in items) {
         if (seen.add(idOf(it))) {
@@ -288,14 +417,16 @@ class DeyeApiClient implements DeyeApi {
           added++;
         }
       }
-      if (items.isEmpty || added == 0) break;
-      if (total != null && out.length >= total) break;
-      if (items.length < (serverPageSize ?? size) && total == null) break;
+      if (items.isEmpty || added == 0) {
+        // No progress. Only a server that still claims more rows is "stalled";
+        // otherwise this is simply the end of the list.
+        stalled = items.isNotEmpty && reported != null && out.length < reported;
+        break;
+      }
+      if (reported != null && out.length >= reported) break;
+      if (reported == null && items.length < pageSize) break;
     }
-    if (total != null && out.length < total) {
-      log?.call('$path: received ${out.length} of $total items');
-    }
-    return out;
+    return _ListAttempt(items: out, total: total, spelling: spelling, stalled: stalled);
   }
 
   // --------------------------------------------------------------- account

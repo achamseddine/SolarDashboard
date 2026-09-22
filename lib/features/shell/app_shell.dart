@@ -19,14 +19,18 @@ class AppShell extends ConsumerWidget {
     (path: '/connectivity', icon: Icons.wifi, selected: Icons.wifi, label: 'Connectivity'),
     (path: '/education', icon: Icons.groups_outlined, selected: Icons.groups, label: 'Education'),
     (path: '/schools', icon: Icons.school_outlined, selected: Icons.school, label: 'Schools'),
-    (path: '/stations', icon: Icons.solar_power_outlined, selected: Icons.solar_power, label: 'Plants'),
+    (path: '/plants', icon: Icons.solar_power_outlined, selected: Icons.solar_power, label: 'Plants'),
     (path: '/alarms', icon: Icons.notifications_outlined, selected: Icons.notifications, label: 'Alarms'),
     (path: '/map', icon: Icons.map_outlined, selected: Icons.map, label: 'Map'),
     (path: '/settings', icon: Icons.settings_outlined, selected: Icons.settings, label: 'Settings'),
   ];
 
+  /// The plant list and a plant page belong to the Plants entry.
+  static const _plantPaths = ['/plants', '/stations'];
+
   int get _index {
-    final i = _destinations.indexWhere((d) => location == d.path || location.startsWith('${d.path}/'));
+    final loc = _plantPaths.any((p) => location == p || location.startsWith('$p/')) ? '/plants' : location;
+    final i = _destinations.indexWhere((d) => loc == d.path || loc.startsWith('${d.path}/'));
     return i < 0 ? 0 : i;
   }
 

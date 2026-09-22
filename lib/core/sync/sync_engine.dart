@@ -229,7 +229,21 @@ class SyncEngine {
   // --------------------------------------------------------------- stations
 
   Future<int> _syncStations() async {
-    final list = await api.listStations();
+    final client = api;
+    final list = await client.listStations();
+    // The cloud tells us how many plants the account holds; when the list
+    // comes back shorter the fetch was truncated (paging that does not
+    // advance, a server-side cap …) and the fleet on screen would be a lie.
+    final report = client is DeyeApiClient ? client.lastStationListReport : null;
+    final reportedTotal = report?.total;
+    final truncated = report?.truncated ?? false;
+    final truncation = report?.message('plants');
+    if (truncated) {
+      log?.call('WARNING: $truncation – plants missing from this sweep are kept, not archived');
+    } else if (reportedTotal != null && reportedTotal != list.length) {
+      log?.call('WARNING: DeyeCloud reported $reportedTotal plants but only ${list.length} could be parsed');
+    }
+    _emit(_status.copyWith(truncation: truncation, clearTruncation: truncation == null));
     if (list.isEmpty) {
       log?.call('Station list is empty – nothing archived');
       return 0;
@@ -241,8 +255,13 @@ class SyncEngine {
     }
     final now = _now();
     await db.stations.upsertStations(resolved, now: now);
-    final archived = await db.stations.archiveNotSeen(resolved.map((s) => s.id).toSet());
-    if (archived > 0) log?.call('Archived $archived stations no longer in the account');
+    if (truncated) {
+      // Archiving now would hide plants that exist but were not sent.
+      log?.call('Archive sweep skipped: the plant list looks truncated');
+    } else {
+      final archived = await db.stations.archiveNotSeen(resolved.map((s) => s.id).toSet());
+      if (archived > 0) log?.call('Archived $archived stations no longer in the account');
+    }
 
     // Opportunistic live values carried by the station list.
     final latest = <StationLatest>[];
@@ -257,7 +276,7 @@ class SyncEngine {
       await db.stations.insertSnapshots(latest.map((l) => l.snapshot!).toList());
     }
     await db.sync.metaSet('sync.first', '1');
-    _emit(_status.copyWith(current: resolved.length, total: resolved.length, stationsSynced: resolved.length));
+    _emit(_status.copyWith(current: resolved.length, total: reportedTotal ?? resolved.length, stationsSynced: resolved.length));
     db.notifyChanged(DataKind.stations);
     await linkSchools();
     return resolved.length;
