@@ -62,8 +62,10 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 6; shot school_record_3
   scroll 6; shot school_record_4
   scroll 8; shot school_record_5
-  xdotool mousemove 95 414 click 1; sleep 3; shot plants
-  xdotool mousemove 500 330 click 1; sleep 4; shot plant_detail
+  xdotool mousemove 95 414 click 1; sleep 4; shot plants
+  scroll 5; shot plants_2
+  scroll 6; shot plants_3
+  xdotool mousemove 500 430 click 1; sleep 4; shot plant_detail
   scroll 4; shot plant_detail_2
   scroll 6; shot plant_detail_3
   scroll 6; shot plant_detail_4

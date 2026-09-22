@@ -62,6 +62,7 @@ lib/
     shell/app_shell.dart         NavigationRail + content area, sync status bar, offline banner
     dashboard/                   fleet dashboard (KPI tiles, charts, rankings, region table, alarm summary)
     programme/                   solarisation programme dashboard (coverage, funding, audited loads, education, links)
+    plants/                      DeyeCloud-style plant overview (KPIs, status counters, paged plant table)
     schools/                     school directory (every MEHE school) and the per-school record page
     connectivity/                internet-connectivity dashboard (coverage, solar × internet matrix, gaps)
     education/                   student and teacher indicators (attendance, risk, afternoon-shift staff)

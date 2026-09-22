@@ -119,6 +119,16 @@ monitored, plants down without connectivity, undersized systems, next candidates
 audited coverage per monitored school, education indicators (attendance comparisons — descriptive
 only), plant ↔ school link statistics with the unlinked plants. Every card copes with an empty fleet.
 
+### Plants (`/plants`)
+Mirrors the DeyeCloud console overview. KPI strip: real-time generating power, installed capacity,
+daily, monthly and total production. Status counters as filter chips (total, online, offline, alarm,
+stale, unknown, partial offline, with alerts, no alerts) where "partial offline" means the plant still
+reports while some of its devices do not. Paged table (25/50/100/all) of every plant: plant and
+location, status, alarms, capacity, power now, today's trend sparkline, daily production, battery,
+last data, open. Search over name, id, governorate, district and address. The list never filters by
+school linkage or region, so plants with no location and plants that are not schools still appear. A
+banner warns when the last sync fetched fewer plants than the cloud reported.
+
 ### Schools directory (`/schools`)
 Every school in the dataset, not only the monitored plants. Search (name, Arabic name, CERD, district,
 cadaster, address), governorate and district dropdowns, ownership dropdown, and chips for internet /

@@ -46,6 +46,46 @@ class DeyeEndpoints {
   /// Page size used for list endpoints.
   static const int pageSize = 200;
 
+  /// Page/size parameter namings tried by the paginator, in order.
+  ///
+  /// DeyeCloud deployments are not consistent about how a list request asks
+  /// for the next page: some honour `page`/`size`, others only react to
+  /// `pageNo`/`pageSize` (or one of the other spellings below) and silently
+  /// keep answering with the first page otherwise. The client walks this list
+  /// until one of them actually advances and then remembers the winner.
+  static const List<PagingSpelling> pagingSpellings = [
+    PagingSpelling('page', 'size'),
+    PagingSpelling('pageNo', 'pageSize'),
+    PagingSpelling('pageIndex', 'pageSize'),
+    PagingSpelling('current', 'size'),
+    PagingSpelling('pageNum', 'pageSize'),
+    PagingSpelling('offset', 'limit', offsetBased: true),
+  ];
+
   /// Maximum station ids sent to [stationDevice] per call.
   static const int stationDeviceIdBatch = 20;
+}
+
+/// One way of naming the paging parameters of a list endpoint.
+///
+/// [pageKey] carries a 1-based page number unless [offsetBased] is true, in
+/// which case it carries the number of rows to skip.
+class PagingSpelling {
+  const PagingSpelling(this.pageKey, this.sizeKey, {this.offsetBased = false});
+
+  final String pageKey;
+  final String sizeKey;
+  final bool offsetBased;
+
+  /// Body fragment requesting the [page]-th (1-based) page of [size] rows.
+  Map<String, Object?> params(int page, int size) => {
+        pageKey: offsetBased ? (page - 1) * size : page,
+        sizeKey: size,
+      };
+
+  /// Short label used in logs, e.g. `pageNo/pageSize` or `offset/limit`.
+  String get label => offsetBased ? '$pageKey/$sizeKey (offset)' : '$pageKey/$sizeKey';
+
+  @override
+  String toString() => label;
 }
