@@ -10,24 +10,21 @@ import '../../dashboard/widgets/dashboard_common.dart';
 /// Daily production and usage of one plant over the last 30 days — the
 /// "Generation & Usage History" block of the DeyeCloud plant overview.
 ///
-/// The console mirrors usage below the axis. [EnergyBarChart] pins `minY` to 0
-/// and drops non-positive stack items, so negative values would simply
-/// disappear; the usage side is therefore drawn as a second stacked chart
-/// directly underneath, sharing one legend with the production side.
+/// Like the console, usage is mirrored below the axis: production and battery
+/// discharge stack upwards, consumption, charging and purchased grid energy
+/// stack downwards, one bar per day.
 class UsageHistoryCard extends StatelessWidget {
   const UsageHistoryCard({super.key, required this.detail});
 
   final StationDetail detail;
 
-  static const _produced = ['Production', 'Discharge'];
-  static const _used = ['Consumption', 'Charge', 'Purchased'];
+  static const _series = ['Production', 'Discharge', 'Consumption', 'Charge', 'Purchased'];
 
   @override
   Widget build(BuildContext context) {
     final p = ChartPalette.of(context);
     final days = detail.daily;
-    final producedColors = [p.pv, p.battery];
-    final usedColors = [p.load, p.gridExport, p.gridImport];
+    final colors = [p.pv, p.battery, p.load, p.gridExport, p.gridImport];
 
     if (days.isEmpty) {
       return const SectionCard(
@@ -41,20 +38,14 @@ class UsageHistoryCard extends StatelessWidget {
     final cons = days.fold(0.0, (a, d) => a + (d.consumptionKwh ?? 0));
     String full(String period, double? g, double? c) => '${Fmt.shortDay(period)} · ${Fmt.energy(g)} produced · ${Fmt.energy(c)} used';
 
-    final producedGroups = [
+    // Usage series are passed negative so they stack below the axis.
+    double? down(double? v) => v == null ? null : -v;
+    final groups = [
       for (final d in days)
         BarGroup(
           label: Fmt.shortDay(d.period),
           fullLabel: full(d.period, d.generationKwh, d.consumptionKwh),
-          values: [d.generationKwh, d.dischargeKwh],
-        ),
-    ];
-    final usedGroups = [
-      for (final d in days)
-        BarGroup(
-          label: Fmt.shortDay(d.period),
-          fullLabel: full(d.period, d.generationKwh, d.consumptionKwh),
-          values: [d.consumptionKwh, d.chargeKwh, d.gridImportKwh],
+          values: [d.generationKwh, d.dischargeKwh, down(d.consumptionKwh), down(d.chargeKwh), down(d.gridImportKwh)],
         ),
     ];
 
@@ -64,37 +55,16 @@ class UsageHistoryCard extends StatelessWidget {
       chart: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AxisLabel('Produced', color: p.pv),
           EnergyBarChart(
-            seriesLabels: _produced,
-            seriesColors: producedColors,
-            groups: producedGroups,
+            seriesLabels: _series,
+            seriesColors: colors,
+            groups: groups,
             stacked: true,
-            showLegend: false,
-            height: 170,
+            signed: true,
+            height: 280,
             maxLabels: 10,
           ),
-          const SizedBox(height: 10),
-          _AxisLabel('Used', color: p.load),
-          EnergyBarChart(
-            seriesLabels: _used,
-            seriesColors: usedColors,
-            groups: usedGroups,
-            stacked: true,
-            showLegend: false,
-            height: 170,
-            maxLabels: 10,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 16,
-            runSpacing: 6,
-            children: [
-              for (var i = 0; i < _produced.length; i++) LegendItem(color: producedColors[i], label: _produced[i]),
-              for (var i = 0; i < _used.length; i++) LegendItem(color: usedColors[i], label: _used[i]),
-            ],
-          ),
-          const MutedNote('Both axes share one legend: production and battery discharge are stacked on the upper chart, consumption, battery charging and purchased grid energy on the lower one. Values are the daily counters returned by the cloud, so a day the plant did not report is missing rather than zero.'),
+          const MutedNote('Production and battery discharge stack above the axis, consumption, battery charging and purchased grid energy below it, so each day reads as one mirrored bar. Values are the daily counters returned by the cloud, so a day the plant did not report is missing rather than zero.'),
         ],
       ),
       table: ChartTable(
@@ -109,27 +79,6 @@ class UsageHistoryCard extends StatelessWidget {
               Fmt.energy(d.chargeKwh),
               Fmt.energy(d.gridImportKwh),
             ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Tiny heading that names one of the two stacked halves.
-class _AxisLabel extends StatelessWidget {
-  const _AxisLabel(this.text, {required this.color});
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Container(width: 3, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(width: 6),
-          Text(text, style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );

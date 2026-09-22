@@ -96,7 +96,10 @@ void main() {
     if (d.daily.isEmpty) {
       expect(find.text('No daily energy counters for this plant yet.'), findsOneWidget);
     } else {
-      expect(find.byType(EnergyBarChart), findsNWidgets(2), reason: 'production above, usage below');
+      final chart = tester.widget<EnergyBarChart>(find.byType(EnergyBarChart));
+      expect(chart.signed, isTrue, reason: 'usage is mirrored below the axis, as in the console');
+      expect(chart.seriesLabels, ['Production', 'Discharge', 'Consumption', 'Charge', 'Purchased']);
+      expect(chart.groups.any((g) => g.values.skip(2).any((v) => (v ?? 0) < 0)), isTrue, reason: 'usage series are negative');
       expect(find.descendant(of: find.byType(UsageHistoryCard), matching: find.byWidgetPredicate((w) => w is LegendItem && w.label == 'Purchased')), findsOneWidget);
       // The table twin carries the same five series.
       await tester.tap(find.byTooltip('Show table'));

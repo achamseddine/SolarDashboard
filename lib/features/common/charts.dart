@@ -204,6 +204,7 @@ class EnergyBarChart extends StatelessWidget {
     this.unitFormatter,
     this.showLegend = true,
     this.maxLabels = 12,
+    this.signed = false,
   });
 
   final List<String> seriesLabels;
@@ -215,6 +216,10 @@ class EnergyBarChart extends StatelessWidget {
   final bool showLegend;
   final int maxLabels;
 
+  /// Let negative values stack below the axis, so a produced-versus-used
+  /// history reads as one mirrored bar per day instead of two charts.
+  final bool signed;
+
   @override
   Widget build(BuildContext context) {
     final c = _Chrome(context);
@@ -224,16 +229,23 @@ class EnergyBarChart extends StatelessWidget {
     }
     final n = seriesLabels.length;
     var maxY = 0.0;
+    var minY = 0.0;
     for (final g in groups) {
       if (stacked) {
-        maxY = math.max(maxY, g.values.fold(0.0, (a, v) => a + (v ?? 0)));
+        // Positive and negative series stack away from the axis separately.
+        final up = g.values.fold<double>(0, (a, v) => a + math.max(0.0, v ?? 0));
+        final down = g.values.fold<double>(0, (a, v) => a + math.min(0.0, v ?? 0));
+        maxY = math.max(maxY, up);
+        minY = math.min(minY, down);
       } else {
         for (final v in g.values) {
           maxY = math.max(maxY, v ?? 0);
+          minY = math.min(minY, v ?? 0);
         }
       }
     }
     if (maxY <= 0) maxY = 1;
+    if (!signed) minY = 0;
     final labelEvery = math.max(1, (groups.length / maxLabels).ceil());
     return LayoutBuilder(builder: (context, constraints) {
       final slot = constraints.maxWidth / math.max(1, groups.length);
@@ -246,7 +258,7 @@ class EnergyBarChart extends StatelessWidget {
             child: BarChart(
               BarChartData(
                 maxY: maxY * 1.08,
-                minY: 0,
+                minY: minY * 1.08,
                 alignment: BarChartAlignment.spaceAround,
                 gridData: c.grid(),
                 borderData: c.border(),
@@ -257,7 +269,7 @@ class EnergyBarChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 56,
-                      getTitlesWidget: (v, meta) => v == meta.max ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(right: 6), child: Text(fmt(v), style: c.tick, textAlign: TextAlign.right)),
+                      getTitlesWidget: (v, meta) => v == meta.max ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(right: 6), child: Text(fmt(signed ? v.abs() : v), style: c.tick, textAlign: TextAlign.right)),
                     ),
                   ),
                   bottomTitles: AxisTitles(
@@ -287,7 +299,7 @@ class EnergyBarChart extends StatelessWidget {
                         if (v == null) continue;
                         children.add(TextSpan(text: '\n● ', style: c.tooltip.copyWith(color: seriesColors[s])));
                         children.add(TextSpan(text: '${seriesLabels[s]}  ', style: c.tooltip.copyWith(color: c.p.inkSecondary)));
-                        children.add(TextSpan(text: fmt(v), style: c.tooltip.copyWith(fontWeight: FontWeight.w600)));
+                        children.add(TextSpan(text: fmt(signed ? v.abs() : v), style: c.tooltip.copyWith(fontWeight: FontWeight.w600)));
                       }
                       return BarTooltipItem(g.fullLabel ?? g.label, c.tooltip.copyWith(fontWeight: FontWeight.w600), children: children, textAlign: TextAlign.left);
                     },
@@ -301,9 +313,12 @@ class EnergyBarChart extends StatelessWidget {
                       barRods: stacked
                           ? [
                               BarChartRodData(
-                                toY: groups[i].values.fold(0.0, (a, v) => a + (v ?? 0)),
+                                toY: signed
+                                    ? groups[i].values.fold<double>(0, (a, v) => a + math.max(0.0, v ?? 0))
+                                    : groups[i].values.fold<double>(0, (a, v) => a + (v ?? 0)),
+                                fromY: signed ? groups[i].values.fold<double>(0, (a, v) => a + math.min(0.0, v ?? 0)) : 0,
                                 width: barW,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                borderRadius: signed ? BorderRadius.circular(3) : const BorderRadius.vertical(top: Radius.circular(4)),
                                 rodStackItems: _stackItems(groups[i].values, c.p.surface),
                               ),
                             ]
@@ -332,12 +347,17 @@ class EnergyBarChart extends StatelessWidget {
 
   List<BarChartRodStackItem> _stackItems(List<double?> values, Color surface) {
     final items = <BarChartRodStackItem>[];
-    var from = 0.0;
+    var up = 0.0;
+    var down = 0.0;
     for (var s = 0; s < values.length; s++) {
       final v = values[s] ?? 0;
-      if (v <= 0) continue;
-      items.add(BarChartRodStackItem(from, from + v, seriesColors[s], borderSide: BorderSide(color: surface, width: 1)));
-      from += v;
+      if (v > 0) {
+        items.add(BarChartRodStackItem(up, up + v, seriesColors[s], borderSide: BorderSide(color: surface, width: 1)));
+        up += v;
+      } else if (v < 0 && signed) {
+        items.add(BarChartRodStackItem(down + v, down, seriesColors[s], borderSide: BorderSide(color: surface, width: 1)));
+        down += v;
+      }
     }
     return items;
   }

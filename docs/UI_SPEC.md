@@ -179,6 +179,8 @@ app version). A first-run banner when `!canSync`.
 * Tablet landscape first; every screen scrolls vertically only (wide tables inside horizontal
   `SingleChildScrollView`). Minimum tap target 44 px.
 * Colours only from `AppColors`; status always with icon/label, never colour alone.
+* `EnergyBarChart(signed: true)` stacks negative series below the axis (produced above, used below);
+  the axis and tooltips then read absolute magnitudes.
 * Charts: thin marks (2 px lines, ≤ 24 px bars), hairline solid grid, legend for ≥ 2 series, tooltips on
   touch, no dual axes, no pies for close values, "table view" toggle via `ChartTable` where feasible.
 * Numbers via `Fmt`; times in device local zone (Asia/Beirut on the tablets).
