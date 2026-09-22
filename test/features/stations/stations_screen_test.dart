@@ -147,7 +147,7 @@ void main() {
     await TestEnv.drain(tester);
   });
 
-  testWidgets('station detail renders header, flow, KPIs, devices and alarms', (tester) async {
+  testWidgets('plant page shows the overview and every tab of the console layout', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -157,23 +157,46 @@ void main() {
 
     await tester.pumpWidget(env.wrap(StationDetailScreen(stationId: id)));
     await TestEnv.settle(tester, rounds: 5);
+
+    // Header and the four console tabs.
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Devices'), findsOneWidget);
+    expect(find.text('Alerts'), findsOneWidget);
+    expect(find.text('Plant info'), findsOneWidget);
+    expect(find.textContaining('Inverters online'), findsOneWidget);
     expect(find.text('Power flow'), findsOneWidget);
     expect(find.text('Generation today'), findsOneWidget);
-    expect(find.text('Today'), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    // ListView builds lazily: scroll through the page and collect the section titles.
+    // The overview scrolls through the summary, utilisation and history cards.
     final list = find.byType(ListView).first;
     final seen = <String>{};
     for (var i = 0; i < 12; i++) {
-      for (final label in ['Energy last 30 days', 'Battery — last 30 days', 'Devices ·', 'Alarms', 'Status history']) {
+      for (final label in ['Summary', 'Energy last 30 days', 'Battery — last 30 days']) {
         if (find.textContaining(label).evaluate().isNotEmpty) seen.add(label);
       }
       await tester.drag(list, const Offset(0, -600));
       await tester.pump(const Duration(milliseconds: 200));
       expect(tester.takeException(), isNull, reason: 'layout exception after scroll $i');
     }
-    expect(seen, containsAll(['Energy last 30 days', 'Battery — last 30 days', 'Devices ·', 'Alarms', 'Status history']));
+    expect(seen, containsAll(['Summary', 'Energy last 30 days', 'Battery — last 30 days']));
+
+    // Each remaining tab renders its own content.
+    await tester.tap(find.text('Devices'));
+    await TestEnv.settle(tester, rounds: 2);
+    expect(find.textContaining('Devices ·'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Alerts'));
+    await TestEnv.settle(tester, rounds: 2);
+    expect(find.textContaining('Alarms'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Plant info'));
+    await TestEnv.settle(tester, rounds: 2);
+    expect(find.text('Plant'), findsWidgets);
+    expect(find.text('Plant id'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await TestEnv.drain(tester);
   });
 

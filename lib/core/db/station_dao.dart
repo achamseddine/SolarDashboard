@@ -453,6 +453,25 @@ class StationDao {
     return rows.isEmpty ? const FleetEnergyDay(day: 'all', stations: 0) : _energyDay(rows.first);
   }
 
+  /// All-time totals of one plant, from its monthly rows — the "accumulative
+  /// production / consumption" figures of the cloud console.
+  Future<FleetEnergyDay> stationLifetime(int stationId) async {
+    final rows = await db.rawQuery('''
+      SELECT 'all' AS day, 1 n, SUM(generation_kwh) g, SUM(consumption_kwh) c, SUM(grid_import_kwh) gi, SUM(grid_export_kwh) ge,
+             SUM(charge_kwh) ch, SUM(discharge_kwh) dc FROM station_monthly WHERE station_id = ?''', [stationId]);
+    return rows.isEmpty ? const FleetEnergyDay(day: 'all', stations: 0) : _energyDay(rows.first);
+  }
+
+  /// Totals of one plant between two local days (inclusive), used for the
+  /// month/year utilisation donuts.
+  Future<FleetEnergyDay> stationTotals(int stationId, String fromDay, String toDay) async {
+    final rows = await db.rawQuery('''
+      SELECT ? AS day, 1 n, SUM(generation_kwh) g, SUM(consumption_kwh) c, SUM(grid_import_kwh) gi, SUM(grid_export_kwh) ge,
+             SUM(charge_kwh) ch, SUM(discharge_kwh) dc FROM station_daily
+      WHERE station_id = ? AND day >= ? AND day <= ?''', [fromDay, stationId, fromDay, toDay]);
+    return rows.isEmpty ? FleetEnergyDay(day: fromDay, stations: 0) : _energyDay(rows.first);
+  }
+
   FleetEnergyDay _energyDay(Map<String, Object?> r) => FleetEnergyDay(
         day: r['day'] as String,
         stations: asInt(r['n']) ?? 0,

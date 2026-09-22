@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api/deye_api.dart';
 import 'api/deye_api_client.dart';
 import 'db/app_database.dart';
+import 'db/station_dao.dart';
 import 'demo/demo_deye_api.dart';
 import 'insights/fleet_insights_builder.dart';
 import 'insights/connectivity_insights_builder.dart';
@@ -308,6 +309,8 @@ class StationDetail {
     required this.batteryDays,
     required this.statusEvents,
     this.insight,
+    this.lifetime = const FleetEnergyDay(day: 'all', stations: 0),
+    this.monthToDate = const FleetEnergyDay(day: 'month', stations: 0),
   });
 
   final Station station;
@@ -322,6 +325,12 @@ class StationDetail {
   final List<BatteryDay> batteryDays;
   final List<StatusEvent> statusEvents;
   final StationInsight? insight;
+
+  /// All-time production and consumption of this plant.
+  final FleetEnergyDay lifetime;
+
+  /// This calendar month so far — the basis of the utilisation donuts.
+  final FleetEnergyDay monthToDate;
 }
 
 final stationDetailProvider = FutureProvider.autoDispose.family<StationDetail?, int>((ref, stationId) async {
@@ -348,6 +357,8 @@ final stationDetailProvider = FutureProvider.autoDispose.family<StationDetail?, 
     alerts: await db.alerts.alertsForStation(stationId),
     batteryDays: await db.stations.batteryDaysBetween(stationId, AppTime.addDays(today, -30), today),
     statusEvents: await db.stations.statusEventsBetween(nowTs - 30 * 86400, nowTs, stationId: stationId),
+    lifetime: await db.stations.stationLifetime(stationId),
+    monthToDate: await db.stations.stationTotals(stationId, '${today.substring(0, 7)}-01', today),
     insight: insights.stations.where((s) => s.id == stationId).firstOrNull,
   );
 });

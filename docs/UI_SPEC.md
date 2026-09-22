@@ -78,28 +78,23 @@ now, SOC, today kWh, yield 7 d + perf ratio, availability 7 d, alarms, last data
 Row tap → `/stations/:id`. Show counts "x of y schools". Honour `initialQuery/initialRegion/initialStatus`.
 CSV export button of the current rows (`csv` + `share_plus`; on desktop write to a temp file and share).
 
-### School detail (`/stations/:id`)
-On open call `ref.read(syncEngineProvider).refreshStation(id)` once. Layout:
-* Header: back button, name, status chip, governorate · caza · address, kWp, battery kWh, commissioned,
-  grid type, plant id, coordinates, "Refresh" and "Open in map" actions.
-* **Power flow** panel (custom painter or simple boxed diagram): PV → (load, battery, grid) with live
-  W values and arrows coloured by direction; SOC meter (same-ramp track); data timestamp + age.
-* KPI tiles: today generation/consumption/import/export, yield today so far, yield 7 d vs peer median,
-  self-sufficiency 7 d, availability 30 d, outages 30 d, hours below 20 % SOC today, grid hours today.
-* **School record** (`SchoolProfileCard`): the linked MEHE school (CERD, Arabic name, ownership,
-  capacity, students AM/PM, enrolment, address, school phone, connectivity chip), solar tracker data
-  (status, donor, project, contractor, consultant, cost, LED/QA cost, tracker kWp/inverter/battery vs
-  cloud capacity), audited annual load by category with expected generation, sizing ratio, measured
-  30-day generation/consumption, equipment inventory (expandable), education indicators; "Change link"
-  opens the school picker (search by name/Arabic name/CERD, automatic suggestions with confidence and
-  distance, unlink, re-run matching). Unlinked plants show a "Link to a school" prompt.
-* **Today** `PowerLineChart` (frames) with yesterday as gray context line (emphasis form).
-* **30-day energy** stacked/grouped `EnergyBarChart`; **12-month** chart; battery `SocHistogram`/30-day
-  SOC min-max band (line chart).
-* **Devices**: one card per device: type icon, model, serial, status, collection time, key readings
-  (`MeasureKeys` groups: PV strings, battery, grid, temperatures, daily counters) + "All readings" table.
-* **Alarms** for this plant (`LevelChip`, status, start/end, description, acknowledge).
-* **Status history**: timeline of status events (30 d) as horizontal coloured bars.
+### Plant (`/stations/:id`)
+Laid out like the cloud console. Header: plant name, status chip, governorate and address, installed
+kWp, battery kWh, inverters online of total, last update, commissioning date, grid type, plant id and
+coordinates, with a refresh action. Four tabs:
+* **Overview** — live power-flow panel and KPI tiles (today's generation, consumption, import, export,
+  yield today and 7 d vs the governorate peer median, self-sufficiency, availability, outages, hours
+  below 20 % SOC, grid hours); a summary card with accumulative production and consumption, today and
+  month to date, and self-sufficiency; solar-and-utilisation donuts splitting where the month's
+  consumption came from (battery, PV direct, grid) and where its production went (battery, load, grid
+  feed-in); today's power curve with yesterday as context; a signed daily history with production and
+  discharge above the axis and consumption, charge and purchased energy below; 30-day and 12-month
+  energy; and the battery SOC history.
+* **Devices** — one card per inverter, battery and logger with its key readings and a full reading table.
+* **Alerts** — this plant's alarms with acknowledgement, and the 30-day status timeline.
+* **Plant info** — the DeyeCloud registration (id, name, governorate, district, address, coordinates,
+  capacity, battery, grid type, owner, contact, time zone) and the linked MEHE school record with its
+  link picker.
 
 ### Alarms (`/alarms`)
 Filter row: status (active/recovered), level, source (cloud/derived), region, days (1/7/30/all),

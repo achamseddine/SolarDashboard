@@ -7,13 +7,30 @@ import '../nav.dart';
 
 /// Back button, name, status, master data line and actions.
 class StationHeader extends StatelessWidget {
-  const StationHeader({super.key, required this.station, required this.status, required this.onRefresh, this.refreshing = false, this.lastError});
+  const StationHeader({
+    super.key,
+    required this.station,
+    required this.status,
+    required this.onRefresh,
+    this.refreshing = false,
+    this.lastError,
+    this.invertersOnline,
+    this.invertersTotal,
+    this.lastUpdateTs,
+  });
 
   final Station station;
   final StationStatus status;
   final VoidCallback onRefresh;
   final bool refreshing;
   final String? lastError;
+
+  /// Inverters reporting, of the inverters known for this plant.
+  final int? invertersOnline;
+  final int? invertersTotal;
+
+  /// Newest data timestamp, shown the way the cloud console does.
+  final int? lastUpdateTs;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +39,8 @@ class StationHeader extends StatelessWidget {
     final place = [station.region ?? 'Unassigned', ?station.caza, ?station.address].join(' · ');
     final facts = <String>[
       'kWp ${Fmt.capacity(station.installedCapacityKw)}',
+      if (invertersTotal != null && invertersTotal! > 0) 'Inverters online ${invertersOnline ?? 0} of $invertersTotal',
+      'Last update ${Fmt.dateTime(lastUpdateTs ?? station.lastUpdateTs)}',
       'Battery ${station.batteryCapacityKwh == null ? '–' : Fmt.energy(station.batteryCapacityKwh)}',
       'Commissioned ${Fmt.date(station.startOperatingTs ?? station.createdTs)}',
       'Grid ${station.gridType ?? '–'}',
