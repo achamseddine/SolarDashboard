@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../models/gwn.dart';
@@ -6,6 +8,31 @@ import 'gwn_api.dart';
 import 'gwn_api_exception.dart';
 import 'gwn_endpoints.dart';
 import 'json_utils.dart';
+
+/// Hands the response body back as text, whatever content type it claims.
+///
+/// Dio's default transformer parses anything labelled `application/json`, so
+/// an HTML error page raises a `FormatException` that surfaces as a
+/// transport failure with no status code — which reads as "the network is
+/// down" when the server in fact answered 404. Probing endpoints nobody has
+/// documented means meeting exactly those bodies, so the client decodes the
+/// text itself and keeps the status.
+class _TextTransformer extends Transformer {
+  @override
+  Future<String> transformRequest(RequestOptions options) async {
+    final data = options.data;
+    return data is String ? data : jsonEncode(data);
+  }
+
+  @override
+  Future<Object?> transformResponse(RequestOptions options, ResponseBody responseBody) async {
+    final bytes = <int>[];
+    await for (final chunk in responseBody.stream) {
+      bytes.addAll(chunk);
+    }
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+}
 
 /// HTTP client for the GWN Cloud Open API.
 ///
@@ -17,6 +44,7 @@ import 'json_utils.dart';
 class GwnApiClient implements GwnApi {
   GwnApiClient({required GwnCredentials credentials, Dio? dio})
       : _credentials = credentials,
+        _probeAdapter = dio?.httpClientAdapter,
         _dio = dio ??
             Dio(BaseOptions(
               baseUrl: credentials.baseUrl,
@@ -26,9 +54,15 @@ class GwnApiClient implements GwnApi {
               headers: const {'Content-Type': 'application/json', 'Accept': 'application/json'},
               responseType: ResponseType.json,
               validateStatus: (_) => true,
-            ));
+            )) {
+    _dio.transformer = _TextTransformer();
+  }
 
   final Dio _dio;
+
+  /// When a transport was injected (tests), probes borrow its adapter so they
+  /// reach the same place the client does.
+  final HttpClientAdapter? _probeAdapter;
   GwnCredentials _credentials;
 
   String? _token;
@@ -67,52 +101,116 @@ class GwnApiClient implements GwnApi {
     if (!_credentials.isComplete) {
       throw GwnApiException('GWN Cloud credentials are incomplete', code: 'AUTH');
     }
-    Object? lastError;
+    // Each probe gets its own transport: a failed attempt used to close the
+    // shared one, so every later candidate reported "Dio can't establish a
+    // new connection after it was closed" and buried the real first error.
+    final attempts = <String>[];
     for (final path in GwnEndpoints.tokenCandidates) {
       for (final fields in GwnEndpoints.tokenFieldSpellings) {
+        final probe = _newDio();
         try {
-          final json = await _raw('POST', path, body: {
+          final json = await _raw('POST', path, dio: probe, body: {
             fields.id: _credentials.appId.trim(),
             fields.secret: _credentials.secretKey.trim(),
             'grant_type': 'client_credentials',
           });
           final token = asString(pick(json, ['access_token', 'accessToken', 'token'])) ??
               asString(pick(asMap(pick(json, ['data', 'result'])), ['access_token', 'accessToken', 'token']));
-          if (token == null || token.isEmpty) continue;
+          if (token == null || token.isEmpty) {
+            attempts.add('$path (${fields.id}): answered, but carried no token');
+            continue;
+          }
           _token = token;
           final ttl = asInt(pick(json, ['expires_in', 'expiresIn', 'expire'])) ??
               asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
           _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
           lastProbe['token'] = '$path (${fields.id})';
           return;
+        } on GwnApiException catch (e) {
+          attempts.add('$path (${fields.id}): ${e.status == null ? e.message : 'HTTP ${e.status}'}');
         } catch (e) {
-          lastError = e;
+          attempts.add('$path (${fields.id}): $e');
+        } finally {
+          probe.close(force: true);
         }
       }
     }
-    throw GwnApiException(
-      'Could not obtain a GWN Cloud token. Check the App ID and Secret Key, and confirm the Open API paths in GwnEndpoints'
-      '${lastError == null ? '' : ' (last error: $lastError)'}',
-      code: 'AUTH',
-    );
+    throw GwnApiException(_loginDiagnosis(attempts), code: 'AUTH');
+  }
+
+  /// Turns the probe log into something an operator can act on: whether the
+  /// host was reachable at all, whether it rejected the credentials, or
+  /// whether it simply has no endpoint at these paths.
+  String _loginDiagnosis(List<String> attempts) {
+    final joined = attempts.join('; ');
+    final host = Uri.tryParse(_credentials.baseUrl)?.host ?? _credentials.baseUrl;
+    final unreachable = attempts.every((a) => a.contains('Network error'));
+    final rejected = attempts.any((a) => a.contains('HTTP 401') || a.contains('HTTP 403'));
+    final notFound = attempts.every((a) => a.contains('HTTP 404') || a.contains('HTTP 405'));
+
+    final String lead;
+    if (unreachable) {
+      lead = 'Could not reach $host at all. Check the tablet has internet, and that the Region matches the data centre '
+          'your GWN account lives on.';
+    } else if (rejected) {
+      lead = '$host answered but rejected the credentials. Check the App ID and Secret Key, and that the Open API is '
+          'enabled for this account.';
+    } else if (notFound) {
+      lead = '$host is reachable but has no token endpoint at any path this build knows. The Open API paths in '
+          'GwnEndpoints need to be set from the developer portal.';
+    } else {
+      lead = 'Could not obtain a GWN Cloud token from $host.';
+    }
+    return '$lead\n\nTried: $joined';
+  }
+
+  /// A transport configured for this account. Probes take one each so a
+  /// failure cannot poison the client's own.
+  Dio _newDio() {
+    final d = Dio(BaseOptions(
+      baseUrl: _credentials.baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 40),
+      sendTimeout: const Duration(seconds: 15),
+      headers: const {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      // Plain, not json: an unknown endpoint may answer with an HTML error
+      // page, and a decode failure inside Dio would hide its status code.
+      responseType: ResponseType.plain,
+      validateStatus: (_) => true,
+    ));
+    if (_probeAdapter != null) d.httpClientAdapter = _probeAdapter;
+    d.transformer = _TextTransformer();
+    return d;
   }
 
   // ------------------------------------------------------------ requests
 
-  Future<Map<String, Object?>> _raw(String method, String path, {Map<String, Object?>? body, Map<String, Object?>? query, bool auth = false}) async {
+  Future<Map<String, Object?>> _raw(String method, String path, {Map<String, Object?>? body, Map<String, Object?>? query, bool auth = false, Dio? dio}) async {
     _requestCount++;
     Response<Object?> res;
     try {
-      res = await _dio.request<Object?>(
+      res = await (dio ?? _dio).request<Object?>(
         path,
         data: body,
         queryParameters: query,
         options: Options(
           method: method,
           headers: auth && _token != null ? {'Authorization': 'Bearer $_token'} : null,
+          // Always take the body as text and decode it here. Letting Dio
+          // parse it means a non-JSON error page raises a transport error
+          // with no status code, which reads as "the network is down" when
+          // the server in fact answered 404.
+          responseType: ResponseType.plain,
         ),
       );
     } on DioException catch (e) {
+      // The server answering with a body Dio could not decode (an HTML error
+      // page, say) is not a network failure — report its status, so the
+      // diagnosis does not blame the tablet's connection for a wrong path.
+      final status = e.response?.statusCode;
+      if (status != null) {
+        throw GwnApiException('HTTP $status', endpoint: path, status: status);
+      }
       throw GwnApiException('Network error: ${e.message ?? e.type.name}', endpoint: path);
     }
     if (res.statusCode == 401 || res.statusCode == 403) {
@@ -121,7 +219,18 @@ class GwnApiClient implements GwnApi {
     if ((res.statusCode ?? 500) >= 400) {
       throw GwnApiException('HTTP ${res.statusCode}', endpoint: path, status: res.statusCode);
     }
-    final data = res.data;
+    var data = res.data;
+    if (data is String) {
+      final text = data.trim();
+      if (text.isEmpty) {
+        throw GwnApiException('Empty response', endpoint: path, status: res.statusCode);
+      }
+      try {
+        data = jsonDecode(text) as Object?;
+      } catch (_) {
+        throw GwnApiException('HTTP ${res.statusCode} — the response was not JSON', endpoint: path, status: res.statusCode);
+      }
+    }
     if (data is Map) return data.map((k, v) => MapEntry(k.toString(), v));
     if (data is List) return {'data': data};
     throw GwnApiException('Unexpected payload of type ${data.runtimeType}', endpoint: path, status: res.statusCode);

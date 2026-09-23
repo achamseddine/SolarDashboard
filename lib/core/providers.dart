@@ -150,8 +150,11 @@ final gwnApiProvider = Provider<GwnApi>((ref) {
   return api;
 });
 
+// Watches the gateway rather than reading it: saving credentials rebuilds
+// gwnApiProvider and disposes the old client, and a sync still holding that
+// one failed with "Dio can't establish a new connection after it was closed".
 final networkSyncProvider = Provider<NetworkSync>((ref) => NetworkSync(
-      api: ref.read(gwnApiProvider),
+      api: ref.watch(gwnApiProvider),
       db: ref.read(databaseProvider),
       source: ref.watch(gwnIsDemoProvider) ? 'demo' : 'live',
       log: (m) => ref.read(appLogProvider.notifier).add(m),
