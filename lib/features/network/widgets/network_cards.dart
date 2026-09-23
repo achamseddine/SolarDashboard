@@ -18,7 +18,9 @@ class NetworkHeadlineKpis extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = insights;
     return TileGrid(
-      minTileWidth: 200,
+      // Wide enough for the longest headline label ("Meaningfully
+      // connected") without the tile clipping it.
+      minTileWidth: 240,
       children: [
         KpiTile(
           label: 'Schools connected',
@@ -208,7 +210,8 @@ class AdoptionIndexCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          HorizontalBars(items: rows, maxValue: 100, formatter: (v) => v.toStringAsFixed(0)),
+          // The framework's component names are long; give them room.
+          HorizontalBars(items: rows, maxValue: 100, labelWidth: 210, formatter: (v) => v.toStringAsFixed(0)),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -396,49 +399,14 @@ class SsidSplitCard extends StatelessWidget {
     return SectionCard(
       title: 'Traffic by SSID',
       subtitle: 'Separates staff, student and admin use over the last ${insights.days} days',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DonutChart(
-            slices: [
-              for (var i = 0; i < rows.length && i < 6; i++)
-                (rows[i].ssid, rows[i].bytes.toDouble(), p.categorical[i % p.categorical.length]),
-            ],
-            centerLabel: 'Total',
-            centerValue: Fmt.bytes(total),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < rows.length && i < 6; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        // An SSID name can be arbitrarily long, so it yields
-                        // space to the figure rather than pushing it off.
-                        Flexible(
-                          child: LegendItem(color: p.categorical[i % p.categorical.length], label: rows[i].ssid),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '${Fmt.bytes(rows[i].bytes)} · ${Fmt.ratio(total == 0 ? null : rows[i].bytes / total)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+      child: DonutChart(
+        slices: [
+          for (var i = 0; i < rows.length && i < 6; i++)
+            (rows[i].ssid, rows[i].bytes.toDouble(), p.categorical[i % p.categorical.length]),
         ],
+        centerLabel: 'Total',
+        centerValue: Fmt.bytes(total),
+        valueFormatter: Fmt.bytes,
       ),
     );
   }

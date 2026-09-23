@@ -47,11 +47,21 @@ xvfb-run -a -s "-screen 0 1440x900x24" bash -c '
   scroll 6; shot programme_9
   scroll 6; shot programme_10
   scroll 8; shot programme_11
-  xdotool mousemove 95 282 click 1; shot connectivity
+  xdotool mousemove 95 282 click 1; sleep 4; shot connectivity
   scroll 5; shot connectivity_2
   scroll 6; shot connectivity_3
   scroll 6; shot connectivity_4
   scroll 8; shot connectivity_5
+  # The connectivity tab bar sits under the sync strip, at y=51.
+  xdotool mousemove 357 51 click 1; sleep 8; shot network_overview
+  scroll 6; shot network_overview_2
+  scroll 6; shot network_overview_3
+  scroll 8; shot network_overview_4
+  xdotool mousemove 502 51 click 1; sleep 4; shot network_infrastructure
+  scroll 6; shot network_infrastructure_2
+  xdotool mousemove 604 51 click 1; sleep 4; shot network_usage
+  scroll 6; shot network_usage_2
+  xdotool mousemove 686 51 click 1; sleep 4; shot network_schools
   xdotool mousemove 95 326 click 1; sleep 3; shot education
   scroll 5; shot education_2
   scroll 6; shot education_3

@@ -379,10 +379,14 @@ class HorizontalBars extends StatelessWidget {
     this.onTap,
     this.trailing,
     this.barHeight = 14,
+    this.labelWidth = 150,
   });
 
   /// (label, value, optional accent override)
   final List<(String, double, Color?)> items;
+
+  /// Width reserved for the row labels; widen it for longer names.
+  final double labelWidth;
   final Color? color;
   final String Function(double)? formatter;
   final double? maxValue;
@@ -407,7 +411,7 @@ class HorizontalBars extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
-                  SizedBox(width: 150, child: Text(items[i].$1, style: t.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  SizedBox(width: labelWidth, child: Text(items[i].$1, style: t.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Align(
@@ -438,12 +442,16 @@ class HorizontalBars extends StatelessWidget {
 
 /// Part-to-whole donut (≤ 6 slices) with a centre figure and side legend.
 class DonutChart extends StatelessWidget {
-  const DonutChart({super.key, required this.slices, this.centerLabel, this.centerValue, this.size = 160, this.onTap});
+  const DonutChart({super.key, required this.slices, this.centerLabel, this.centerValue, this.size = 160, this.onTap, this.valueFormatter});
 
   /// (label, value, color)
   final List<(String, double, Color)> slices;
   final String? centerLabel;
   final String? centerValue;
+
+  /// How a slice's value reads in the legend. Defaults to a plain count;
+  /// pass one for bytes, energy or anything else with a unit.
+  final String Function(double value)? valueFormatter;
   final double size;
   final void Function(int index)? onTap;
 
@@ -502,7 +510,7 @@ class DonutChart extends StatelessWidget {
                   onTap: onTap == null ? null : () => onTap!(i),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: LegendItem(color: slices[i].$3, label: slices[i].$1, value: total <= 0 ? '0' : '${Fmt.int_(slices[i].$2)} (${(slices[i].$2 / total * 100).toStringAsFixed(0)} %)'),
+                    child: LegendItem(color: slices[i].$3, label: slices[i].$1, value: total <= 0 ? '0' : '${valueFormatter?.call(slices[i].$2) ?? Fmt.int_(slices[i].$2)} (${(slices[i].$2 / total * 100).toStringAsFixed(0)} %)'),
                   ),
                 ),
             ],

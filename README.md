@@ -136,9 +136,21 @@ off the repository: losing it means every tablet has to uninstall and reinstall 
 |-------------------|-------------------------------|
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Dashboard 2](docs/screenshots/dashboard_4.png) |
 
-| Internet connectivity | Students and teachers |
-|-----------------------|------------------------|
+| Internet connectivity (roll-out) | Students and teachers |
+|----------------------------------|------------------------|
 | ![Connectivity](docs/screenshots/connectivity.png) | ![Education](docs/screenshots/education.png) |
+
+| School networks: headline indicators | Adoption index and the weight behind it |
+|---------------------------------------|------------------------------------------|
+| ![Network overview](docs/screenshots/network_overview.png) | ![Adoption index](docs/screenshots/network_overview_3.png) |
+
+| Infrastructure health and faults | Wi-Fi use and traffic by SSID |
+|-----------------------------------|--------------------------------|
+| ![Infrastructure](docs/screenshots/network_infrastructure.png) | ![Usage](docs/screenshots/network_usage.png) |
+
+| Schools, filterable by matrix quadrant | |
+|-----------------------------------------|--|
+| ![Network schools](docs/screenshots/network_schools.png) | |
 
 | Schools directory | School record |
 |-------------------|---------------|
