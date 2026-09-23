@@ -6,6 +6,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/theme.dart';
 import '../common/widgets.dart';
 import 'widgets/credentials_card.dart';
+import 'widgets/gwn_credentials_card.dart';
 import 'widgets/dataset_card.dart';
 import 'widgets/diagnostics_card.dart';
 
@@ -43,6 +44,8 @@ class SettingsScreen extends ConsumerWidget {
           ),
         const SizedBox(height: kGap),
         const CredentialsCard(),
+        const SizedBox(height: kGap),
+        const GwnCredentialsCard(),
         const SizedBox(height: kGap),
         SectionCard(
           title: 'Demo mode',

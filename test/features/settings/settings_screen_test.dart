@@ -17,7 +17,9 @@ void main() {
     await TestEnv.settle(tester, rounds: 2);
     expect(find.text('DeyeCloud account'), findsOneWidget);
     expect(find.text('Demo mode'), findsOneWidget);
-    expect(find.text('Test connection'), findsOneWidget);
+    // Both accounts — DeyeCloud for the plants, GWN Cloud for the networks.
+    expect(find.text('GWN Cloud account (school networks)'), findsOneWidget);
+    expect(find.text('Test connection'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
 
     // Cards below the fold are built lazily: scroll until each one appears.
@@ -54,8 +56,10 @@ void main() {
     expect(find.textContaining('by hand'), findsOneWidget);
     final relink = find.widgetWithText(OutlinedButton, 'Re-link plants');
     expect(relink, findsOneWidget);
+    await tester.ensureVisible(relink);
+    await tester.pump();
     await tester.tap(relink);
-    await TestEnv.settle(tester, rounds: 2);
+    await TestEnv.settle(tester, rounds: 4);
     expect(find.textContaining('plants linked to school records'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await TestEnv.drain(tester);

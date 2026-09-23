@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:unicef_solar_monitor/core/db/app_database.dart';
 import 'package:unicef_solar_monitor/core/demo/demo_deye_api.dart';
+import 'package:unicef_solar_monitor/core/demo/demo_gwn_api.dart';
 import 'package:unicef_solar_monitor/core/providers.dart';
 import 'package:unicef_solar_monitor/core/schools/school_dataset.dart';
 import 'package:unicef_solar_monitor/core/settings/app_settings.dart';
+import 'package:unicef_solar_monitor/core/sync/network_sync.dart';
 import 'package:unicef_solar_monitor/core/sync/sync_engine.dart';
 import 'package:unicef_solar_monitor/core/theme.dart';
 import 'package:unicef_solar_monitor/core/utils/app_time.dart';
@@ -24,19 +26,20 @@ import 'package:unicef_solar_monitor/core/utils/app_time.dart';
 /// await tester.pump(); await tester.pump(const Duration(seconds: 1));
 /// ```
 class TestEnv {
-  TestEnv._(this.db, this.prefs, this.settings, this.api);
+  TestEnv._(this.db, this.prefs, this.settings, this.api, this.gwnApi);
 
   final AppDatabase db;
   final SharedPreferences prefs;
   final AppSettings settings;
   final DemoDeyeApi api;
+  final DemoGwnApi gwnApi;
 
   static SchoolDataset? _dataset;
 
   /// The bundled school dataset, read once from `assets/data/schools.json`.
   static SchoolDataset get dataset => _dataset ??= SchoolDataset.fromJson(File(SchoolDataset.assetPath).readAsStringSync());
 
-  static Future<TestEnv> create({int schools = 20, bool sync = true, AppSettings? settings, bool withSchools = true}) async {
+  static Future<TestEnv> create({int schools = 20, bool sync = true, AppSettings? settings, bool withSchools = true, int networks = 0}) async {
     sqfliteFfiInit();
     AppTime.ensureInitialised();
     SharedPreferences.setMockInitialValues({});
@@ -50,7 +53,15 @@ class TestEnv {
       await engine.loadMeta();
       await engine.syncNow();
     }
-    return TestEnv._(db, prefs, s, api);
+    final gwn = DemoGwnApi(
+      latency: Duration.zero,
+      networks: networks == 0 ? 1 : networks,
+      seeds: withSchools ? dataset.demoSeeds : const [],
+    );
+    if (networks > 0) {
+      await NetworkSync(api: gwn, db: db).run();
+    }
+    return TestEnv._(db, prefs, s, api, gwn);
   }
 
   List<Override> get overrides => [
@@ -59,6 +70,7 @@ class TestEnv {
         initialSettingsProvider.overrideWithValue(settings),
         apiProvider.overrideWithValue(api),
         demoSeedsProvider.overrideWithValue(api.seeds),
+        gwnApiProvider.overrideWithValue(gwnApi),
       ];
 
   /// Wraps [child] in a ProviderScope + MaterialApp sized like a tablet.
@@ -73,9 +85,9 @@ class TestEnv {
   Future<void> dispose() => db.close();
 
   /// Creates the environment from inside a widget test (real async zone).
-  static Future<TestEnv> createFor(WidgetTester tester, {int schools = 20}) async {
+  static Future<TestEnv> createFor(WidgetTester tester, {int schools = 20, int networks = 0}) async {
     late TestEnv env;
-    await tester.runAsync(() async => env = await create(schools: schools));
+    await tester.runAsync(() async => env = await create(schools: schools, networks: networks));
     return env;
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/connectivity_insights.dart';
+import '../../core/models/network_insights.dart';
 import '../../core/models/school_insights.dart';
 import '../../core/providers.dart';
 import '../../core/utils/format.dart';
@@ -13,12 +14,93 @@ import 'widgets/connectivity_region_card.dart';
 import 'widgets/data_path_card.dart';
 import 'widgets/district_cards.dart';
 import 'widgets/quadrant_card.dart';
+import '../network/network_tabs.dart';
 
-/// Internet connectivity of the public schools: the roll-out per governorate
-/// and district, how it overlaps with the solar programme, and which
-/// monitored plants have no data path back to the cloud.
-class ConnectivityScreen extends ConsumerWidget {
+/// Internet connectivity of the public schools, in two halves.
+///
+/// **Roll-out** is the MEHE membership list: which schools are on the
+/// connectivity programme at all. The other tabs are live telemetry from the
+/// GWN Cloud account — infrastructure health, how reliably each school is
+/// actually connected, and whether the network is used — following the
+/// School Digital Infrastructure & Adoption indicator framework.
+class ConnectivityScreen extends ConsumerStatefulWidget {
   const ConnectivityScreen({super.key});
+
+  @override
+  ConsumerState<ConnectivityScreen> createState() => _ConnectivityScreenState();
+}
+
+class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 5, vsync: this);
+  AdoptionQuadrant? _quadrant;
+
+  @override
+  void initState() {
+    super.initState();
+    // First open with empty network tables pulls the account once, so the
+    // dashboards have something to show without hunting for a sync button.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !ref.read(canSyncNetworksProvider)) return;
+      final rows = await ref.read(databaseProvider).networks.getNetworks();
+      if (!mounted || rows.isNotEmpty) return;
+      try {
+        await ref.read(networkSyncReportProvider.notifier).sync();
+      } catch (_) {
+        // The banner and the empty state carry the failure.
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  /// Jumping from the matrix to the school list carries the filter with it.
+  void _showSchools(AdoptionQuadrant quadrant) {
+    setState(() => _quadrant = quadrant);
+    _tabs.animateTo(4);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(text: 'Roll-out'),
+            Tab(text: 'Network overview'),
+            Tab(text: 'Infrastructure'),
+            Tab(text: 'Usage'),
+            Tab(text: 'Schools'),
+          ],
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: [
+              const _RolloutTab(),
+              NetworkOverviewTab(onShowSchools: _showSchools),
+              const NetworkInfrastructureTab(),
+              const NetworkUsageTab(),
+              NetworkSchoolsTab(quadrant: _quadrant),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The MEHE connectivity roll-out — who is on the programme.
+class _RolloutTab extends ConsumerWidget {
+  const _RolloutTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -17,6 +17,7 @@ governorate roll-ups, rankings and environmental impact — all readable offline
 | Landing dashboard | fleet-wide power generation and consumption (now, today, 7 d, 30 d, lifetime), carbon footprint avoided with diesel equivalent, generation-vs-consumption curve, energy balance, carbon by month, fleet health, generation by governorate |
 | Schools directory | every school in the MEHE master list (1,211 public schools, 1,246 records), searchable and filterable by governorate, district, ownership, internet connectivity, solar status, monitored plant, energy audit and second shift; sortable table with CERD, internet, solar, kWp, students, audited load and attendance; CSV export |
 | School record | one page per school whether or not it has a plant: master data (Arabic name, ownership, cadaster, CAS code, address, phone, students AM/PM, capacity, coordinates), internet-connectivity status in the context of its governorate, solar tracker record, energy audit with the equipment inventory, live plant figures when linked, and education indicators |
+| Connectivity → network | live school-network monitoring from the GWN Cloud account, against the School Digital Infrastructure & Adoption indicator framework: executive headline indicators, infrastructure health (gateway, switches, APs, PoE and LAN ports, firmware), internet reliability, Wi-Fi and device usage, traffic by SSID, regularity of use, the Technology Adoption Index with its components, the infrastructure × adoption matrix, and a per-school table filterable by quadrant |
 | Connectivity | internet roll-out dashboard: connected schools and students reached, coverage per governorate, the solar × internet matrix (solar + internet, solar only, internet only, neither), districts with the largest gap and the best served, and the monitored plants sitting at schools without a data path |
 | Programme | solarisation programme dashboard from the MEHE/UNICEF workbooks: public schools vs solarised vs connected vs monitored (overall and per governorate), pipeline, students benefiting, installed kWp, investment and cost per kWp, funding by donor/project/contractor, audited annual loads by category vs expected and measured generation, undersized systems, next candidates, LED share, education indicators, plant ↔ school link status |
 | Students and teachers | education dashboard from the MEHE extract: attendance by shift (mean and weighted by students), risk ratings, afternoon-shift teaching staff with the gender split, per-term attendance reporting, students per teacher, teaching days, third-party verification visits, and a governorate breakdown |
@@ -65,6 +66,52 @@ If Android refuses with **"App not installed"**, the copy already on the tablet 
 different key than the new APK. Uninstall the old copy and install again. That clears the local
 cache and the stored DeyeCloud credentials, so re-enter them in Settings afterwards; nothing is
 lost, as the fleet history is re-synced from the cloud.
+
+## School network monitoring (GWN Cloud)
+
+The Connectivity page carries five tabs. **Roll-out** is the MEHE membership list — which schools are
+on the connectivity programme. The other four are live telemetry from the GWN Cloud account that
+manages the school LANs, computed against the *School Digital Infrastructure & Adoption* indicator
+framework.
+
+Configure the account in **Settings → GWN Cloud account** (App ID and Secret Key), or seed it at
+build time:
+
+```bash
+flutter build apk --release \
+  --dart-define=GWN_APP_ID=... --dart-define=GWN_SECRET_KEY=... --dart-define=GWN_BASE_URL=https://www.gwn.cloud
+```
+
+Credentials go to the platform secure store, never to the database or this repository.
+
+### What the framework asks for, and what this build can answer
+
+| Family | Computed here | Needs another source |
+|--------|---------------|----------------------|
+| Infrastructure health | gateway, switch and AP availability, AP uptime, PoE and LAN port faults, switch CPU/memory, firmware compliance | configuration compliance (needs a VLAN/SSID/firewall baseline) |
+| Internet & performance | availability, uptime, downtime, days since last outage | download/upload speed, latency, packet loss, jitter, contracted bandwidth, ISP SLA |
+| Wi-Fi & device usage | active and peak clients, daily unique devices, traffic volume, traffic by SSID, active AP footprint | — |
+| Technology adoption | school days with activity, regular use, usage growth, teaching-hours share, under-used and high-adoption flags | — |
+| Digital learning | — | Madristi / Learning Passport platform analytics |
+| Support & maintenance | open alarms, critical incidents | helpdesk tickets, mean time to repair, repeat faults |
+| Power & resilience | — | UPS telemetry where SNMP is installed |
+
+The **Technology Adoption Index** uses the framework's weights, but scores only the components the
+app actually has — infrastructure availability, internet reliability, Wi-Fi utilisation and
+regularity of use, 60 % of the total weight — and renormalises over them. The page states that share
+and names each missing component with the source that would fill it, so a school is never marked
+down for data nobody collected. The index is shown with its components, as the framework asks,
+because it is a diagnostic rather than a ranking.
+
+The **infrastructure × adoption matrix** keeps its two axes independent: infrastructure health on one,
+usage on the other. That is what separates a school needing a technician from one needing training.
+Tapping a quadrant opens the school list filtered to it.
+
+> **Endpoint paths are not yet confirmed.** `doc.grandstream.dev` was unreachable from the build
+> environment, so `lib/core/api/gwn_endpoints.dart` lists candidate paths and token field spellings
+> and the client keeps whichever the account accepts. *Settings → Test connection* reports what it
+> settled on. Replace each candidate list with the documented path once known; nothing outside that
+> file changes.
 
 ### Release signing
 

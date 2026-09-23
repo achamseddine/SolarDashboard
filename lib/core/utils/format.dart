@@ -96,6 +96,17 @@ class Fmt {
     return '${d.inDays} d ago';
   }
 
+  /// Network traffic, in the unit that keeps the number readable.
+  static String bytes(num? b) {
+    if (b == null) return '–';
+    final v = b.toDouble();
+    if (v.abs() < 1024) return '${v.round()} B';
+    if (v.abs() < 1024 * 1024) return '${_one.format(v / 1024)} kB';
+    if (v.abs() < 1024 * 1024 * 1024) return '${_one.format(v / (1024 * 1024))} MB';
+    if (v.abs() < 1024 * 1024 * 1024 * 1024) return '${_one.format(v / (1024 * 1024 * 1024))} GB';
+    return '${_one.format(v / (1024 * 1024 * 1024 * 1024))} TB';
+  }
+
   /// The cloud returns enum-ish codes such as `BATTERY_BACKUP` or
   /// `grid-tied`; render them as ordinary words rather than raw constants.
   static String label(String? v) {

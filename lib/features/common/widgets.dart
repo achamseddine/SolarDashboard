@@ -176,7 +176,9 @@ class LegendItem extends StatelessWidget {
       children: [
         Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 6),
-        Text(label, style: t.labelMedium),
+        // A series name can be long (an SSID, a school); it ellipsizes rather
+        // than pushing the value out of the row.
+        Flexible(child: Text(label, style: t.labelMedium, softWrap: false, overflow: TextOverflow.ellipsis)),
         if (value != null) ...[
           const SizedBox(width: 4),
           Text(value!, style: t.labelMedium?.copyWith(fontWeight: FontWeight.w600)),

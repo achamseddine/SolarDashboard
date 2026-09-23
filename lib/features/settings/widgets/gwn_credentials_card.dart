@@ -1,0 +1,209 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/api/gwn_api_client.dart';
+import '../../../core/api/gwn_endpoints.dart';
+import '../../../core/models/gwn_credentials.dart';
+import '../../../core/providers.dart';
+import '../../common/widgets.dart';
+
+/// GWN Cloud account used by the school-network dashboards.
+///
+/// The App ID and Secret Key are written to the platform secure store, never
+/// to the database or the repository.
+class GwnCredentialsCard extends ConsumerStatefulWidget {
+  const GwnCredentialsCard({super.key});
+
+  @override
+  ConsumerState<GwnCredentialsCard> createState() => _GwnCredentialsCardState();
+}
+
+class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
+  final _form = GlobalKey<FormState>();
+  late final TextEditingController _appId;
+  late final TextEditingController _secret;
+  late String _baseUrl;
+  bool _showSecret = false;
+  bool _busy = false;
+  String? _result;
+  bool _ok = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = ref.read(gwnCredentialsProvider);
+    _appId = TextEditingController(text: c?.appId ?? '');
+    _secret = TextEditingController(text: c?.secretKey ?? '');
+    _baseUrl = c?.baseUrl ?? GwnCredentials.defaultBaseUrl;
+  }
+
+  @override
+  void dispose() {
+    _appId.dispose();
+    _secret.dispose();
+    super.dispose();
+  }
+
+  GwnCredentials get _entered => GwnCredentials(
+        appId: _appId.text.trim(),
+        secretKey: _secret.text.trim(),
+        baseUrl: _baseUrl,
+      );
+
+  Future<void> _test() async {
+    if (!(_form.currentState?.validate() ?? false)) return;
+    setState(() {
+      _busy = true;
+      _result = null;
+    });
+    final client = GwnApiClient(credentials: _entered);
+    try {
+      await client.authenticate();
+      final networks = await client.listNetworks();
+      setState(() {
+        _ok = true;
+        _result = 'Connected. ${networks.length} networks visible. '
+            'Paths used: ${client.lastProbe.entries.map((e) => '${e.key} → ${e.value}').join(', ')}';
+      });
+    } catch (e) {
+      setState(() {
+        _ok = false;
+        _result = '$e';
+      });
+    } finally {
+      client.close();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (!(_form.currentState?.validate() ?? false)) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(gwnCredentialsProvider.notifier).save(_entered);
+      await ref.read(networkSyncReportProvider.notifier).sync();
+      if (mounted) {
+        setState(() {
+          _ok = true;
+          _result = 'Saved and synchronised.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _ok = false;
+          _result = '$e';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clear() async {
+    await ref.read(gwnCredentialsProvider.notifier).clear();
+    _appId.clear();
+    _secret.clear();
+    setState(() => _result = null);
+  }
+
+  String? _required(String? v) => v == null || v.trim().isEmpty ? 'Required' : null;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final saved = ref.watch(gwnCredentialsProvider);
+    return SectionCard(
+      title: 'GWN Cloud account (school networks)',
+      subtitle: saved == null ? 'Not configured — the network dashboards show demo data' : 'Configured · ${saved.baseUrl}',
+      child: Form(
+        key: _form,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'The App ID and Secret Key come from the GWN Cloud account that manages the school networks. They feed the '
+              'Connectivity tabs: infrastructure health, internet reliability, Wi-Fi use and the adoption index.',
+              style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 220,
+                  child: TextFormField(
+                    controller: _appId,
+                    validator: _required,
+                    decoration: const InputDecoration(labelText: 'App ID', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+                SizedBox(
+                  width: 340,
+                  child: TextFormField(
+                    controller: _secret,
+                    validator: _required,
+                    obscureText: !_showSecret,
+                    decoration: InputDecoration(
+                      labelText: 'Secret Key',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        icon: Icon(_showSecret ? Icons.visibility_off : Icons.visibility, size: 18),
+                        onPressed: () => setState(() => _showSecret = !_showSecret),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 260,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: GwnEndpoints.hosts.values.contains(_baseUrl) ? _baseUrl : GwnEndpoints.hosts.values.first,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Region', border: OutlineInputBorder(), isDense: true),
+                    items: [
+                      for (final e in GwnEndpoints.hosts.entries)
+                        DropdownMenuItem(value: e.value, child: Text(e.key, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) => setState(() => _baseUrl = v ?? GwnCredentials.defaultBaseUrl),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(onPressed: _busy ? null : _test, icon: const Icon(Icons.wifi_tethering, size: 18), label: const Text('Test connection')),
+                FilledButton.icon(onPressed: _busy ? null : _save, icon: const Icon(Icons.save_outlined, size: 18), label: const Text('Save and sync')),
+                if (saved != null) TextButton.icon(onPressed: _busy ? null : _clear, icon: const Icon(Icons.delete_outline, size: 18), label: const Text('Clear')),
+                if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              ],
+            ),
+            if (_result != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_ok ? Icons.check_circle_outline : Icons.error_outline, size: 18, color: _ok ? Colors.green : scheme.error),
+                  const SizedBox(width: 6),
+                  Expanded(child: SelectableText(_result!, style: t.bodySmall)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'Stored in the device secure store, never in the database. The Open API paths this build tries are listed '
+              'in GwnEndpoints; "Test connection" reports which one the account accepted.',
+              style: t.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
