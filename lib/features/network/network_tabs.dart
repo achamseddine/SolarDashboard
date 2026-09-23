@@ -97,10 +97,93 @@ class _Body extends ConsumerWidget {
     final insights = ref.watch(networkInsightsProvider);
     return AsyncView<NetworkInsights>(
       value: insights,
-      emptyWhen: (d) => d.isEmpty,
-      emptyMessage: 'No school network has been synchronised yet. Add the GWN Cloud App ID and Secret Key in Settings, '
-          'or turn on demo mode to see the dashboards with synthetic data.',
-      builder: builder,
+      // Emptiness is handled here rather than by a bare message, because
+      // there is something the operator can actually do about it.
+      builder: (d) => d.isEmpty ? const _NoNetworks() : builder(d),
+    );
+  }
+}
+
+/// Shown until a GWN account is configured. Offers the two ways forward
+/// instead of leaving the tab a dead end.
+class _NoNetworks extends ConsumerStatefulWidget {
+  const _NoNetworks();
+
+  @override
+  ConsumerState<_NoNetworks> createState() => _NoNetworksState();
+}
+
+class _NoNetworksState extends ConsumerState<_NoNetworks> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _loadSample() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(networkSyncReportProvider.notifier).sync();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final configured = !ref.watch(gwnIsDemoProvider);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: kPagePadding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.wifi_find_outlined, size: 48, color: Theme.of(context).colorScheme.outline),
+              const SizedBox(height: 12),
+              Text('No school network synchronised yet', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+              const SizedBox(height: 6),
+              Text(
+                configured
+                    ? 'The GWN Cloud account is configured but has not been pulled yet.'
+                    : 'Add the GWN Cloud App ID and Secret Key in Settings to monitor the real school networks. '
+                        'You can also load a synthetic sample to see what the dashboards look like — it is clearly '
+                        'labelled as demo data and is replaced the moment a real account is configured.',
+                style: t.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _loadSample,
+                    icon: _busy
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.play_arrow, size: 18),
+                    label: Text(_busy ? 'Loading…' : (configured ? 'Sync now' : 'Load sample data')),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => goTo(context, '/settings'),
+                    icon: const Icon(Icons.settings_outlined, size: 18),
+                    label: const Text('Open Settings'),
+                  ),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                SelectableText(_error!, style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

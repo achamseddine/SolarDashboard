@@ -40,6 +40,7 @@ class NetworkSync {
     required this.api,
     required this.db,
     this.windowDays = 30,
+    this.source = 'live',
     DateTime Function()? clock,
     this.log,
   }) : _clock = clock ?? DateTime.now;
@@ -47,16 +48,35 @@ class NetworkSync {
   final GwnApi api;
   final AppDatabase db;
   final int windowDays;
+
+  /// Which account these rows came from: 'live' for a configured GWN
+  /// account, 'demo' for the synthetic sample. Stored so switching sources
+  /// clears the previous rows instead of mixing two fleets.
+  final String source;
   final DateTime Function() _clock;
   final void Function(String message)? log;
 
   /// Retention: daily rows older than this many days are dropped.
   static const int keepDays = 120;
 
+  /// sync_meta key recording which source filled the GWN tables.
+  static const String sourceKey = 'gwn.source';
+
   Future<NetworkSyncReport> run() async {
     final now = _clock();
     final toDay = ymd(now);
     final fromDay = ymd(now.subtract(Duration(days: windowDays - 1)));
+
+    // Sample rows and a real account must never mix: changing source wipes
+    // what the previous one wrote.
+    final previous = await db.sync.metaGet(sourceKey);
+    if (previous != null && previous != source) {
+      for (final t in ['gwn_networks', 'gwn_devices', 'gwn_network_daily', 'gwn_ssid_daily', 'gwn_alarms']) {
+        await db.db.delete(t);
+      }
+      log?.call('GWN: source changed from $previous to $source — cleared the previous rows');
+    }
+    await db.sync.metaSet(sourceKey, source);
 
     await api.authenticate();
     final networks = await api.listNetworks();

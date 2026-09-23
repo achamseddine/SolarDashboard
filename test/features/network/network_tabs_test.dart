@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:unicef_solar_monitor/core/settings/app_settings.dart';
 import 'package:unicef_solar_monitor/features/connectivity/connectivity_screen.dart';
 
 import '../../helpers/test_env.dart';
@@ -68,5 +69,37 @@ void main() {
     expect(find.byType(DataTable), findsOneWidget);
     final all = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'All'));
     expect(all.selected, isFalse, reason: 'a quadrant filter should be active, not "All"');
+  });
+
+  testWidgets('without demo mode or a GWN account the tab offers a way forward', (tester) async {
+    // The state on a tablet running real DeyeCloud credentials: demo mode off,
+    // no GWN account, so nothing may be synced automatically.
+    late TestEnv env;
+    await tester.runAsync(() async {
+      env = await TestEnv.create(
+        schools: 5,
+        settings: const AppSettings(demoMode: false, maxConcurrentRequests: 8),
+      );
+    });
+    addTearDown(env.dispose);
+
+    await tester.pumpWidget(env.wrap(const ConnectivityScreen()));
+    await TestEnv.settle(tester, rounds: 6);
+    await tester.tap(find.widgetWithText(Tab, 'Network overview'));
+    await TestEnv.settle(tester, rounds: 6);
+
+    // Not a dead end: both routes forward are offered.
+    expect(find.text('No school network synchronised yet'), findsOneWidget);
+    final load = find.widgetWithText(FilledButton, 'Load sample data');
+    expect(load, findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Open Settings'), findsOneWidget);
+
+    await tester.tap(load);
+    await TestEnv.settle(tester, rounds: 10);
+
+    // The dashboards now carry the synthetic sample, labelled as such.
+    expect(find.text('Schools connected'), findsOneWidget);
+    expect(find.textContaining('Synthetic demo data'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

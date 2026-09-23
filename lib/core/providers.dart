@@ -153,6 +153,7 @@ final gwnApiProvider = Provider<GwnApi>((ref) {
 final networkSyncProvider = Provider<NetworkSync>((ref) => NetworkSync(
       api: ref.read(gwnApiProvider),
       db: ref.read(databaseProvider),
+      source: ref.watch(gwnIsDemoProvider) ? 'demo' : 'live',
       log: (m) => ref.read(appLogProvider.notifier).add(m),
     ));
 
