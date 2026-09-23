@@ -103,35 +103,45 @@ class GwnApiClient implements GwnApi {
     if (!_credentials.isComplete) {
       throw GwnApiException('GWN Cloud credentials are incomplete', code: 'AUTH');
     }
-    // The token sits at the host root, not under the API prefix, and takes
-    // its arguments as query parameters on a GET.
-    final probe = _newDio();
-    try {
-      final json = await _raw('GET', GwnEndpoints.token, dio: probe, query: {
-        'grant_type': 'client_credentials',
-        'client_id': _credentials.appId.trim(),
-        'client_secret': _credentials.secretKey.trim(),
-      });
-      final token = asString(pick(json, ['access_token', 'accessToken', 'token'])) ??
-          asString(pick(asMap(pick(json, ['data', 'result'])), ['access_token', 'accessToken', 'token']));
-      if (token == null || token.isEmpty) {
-        throw GwnApiException(
-          '$_host answered the token request but returned no access_token. '
-          'Check that the Open API is enabled for this App ID.',
-          code: 'AUTH',
-        );
+    final id = _credentials.appId.trim();
+    final secret = _credentials.secretKey.trim();
+    final basic = base64Encode(utf8.encode('$id:$secret'));
+
+    // The reference examples use the first of these. The other two are the
+    // standard client_credentials spellings, tried only if the first is
+    // rejected — a deployment may accept one and not another.
+    final strategies = <({String label, String method, Map<String, Object?>? query, Object? body, Map<String, String>? headers})>[
+      (label: 'GET query', method: 'GET', query: {'grant_type': 'client_credentials', 'client_id': id, 'client_secret': secret}, body: null, headers: null),
+      (label: 'POST form', method: 'POST', query: null, body: 'grant_type=client_credentials&client_id=$id&client_secret=$secret', headers: {'Content-Type': 'application/x-www-form-urlencoded'}),
+      (label: 'POST basic auth', method: 'POST', query: null, body: 'grant_type=client_credentials', headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Basic $basic'}),
+    ];
+
+    final attempts = <String>[];
+    for (final st in strategies) {
+      final probe = _newDio();
+      try {
+        final json = await _raw(st.method, GwnEndpoints.token, dio: probe, query: st.query, body: st.body, headers: st.headers);
+        final token = asString(pick(json, ['access_token', 'accessToken', 'token'])) ??
+            asString(pick(asMap(pick(json, ['data', 'result'])), ['access_token', 'accessToken', 'token']));
+        if (token == null || token.isEmpty) {
+          attempts.add('${GwnEndpoints.token} (${st.label}): answered, but carried no access_token');
+          continue;
+        }
+        _token = token;
+        final ttl = asInt(pick(json, ['expires_in', 'expiresIn', 'expire'])) ??
+            asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
+        _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
+        lastProbe['token'] = '${GwnEndpoints.token} (${st.label})';
+        return;
+      } on GwnApiException catch (e) {
+        attempts.add('${GwnEndpoints.token} (${st.label}): ${e.status == null ? e.message : e.message}');
+      } catch (e) {
+        attempts.add('${GwnEndpoints.token} (${st.label}): $e');
+      } finally {
+        probe.close(force: true);
       }
-      _token = token;
-      final ttl = asInt(pick(json, ['expires_in', 'expiresIn', 'expire'])) ??
-          asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
-      _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
-      lastProbe['token'] = GwnEndpoints.token;
-    } on GwnApiException catch (e) {
-      if (e.code == 'AUTH' && e.status == null) rethrow;
-      throw GwnApiException(_loginDiagnosis(['${GwnEndpoints.token}: ${e.status == null ? e.message : 'HTTP ${e.status}'}']), code: 'AUTH');
-    } finally {
-      probe.close(force: true);
     }
+    throw GwnApiException(_loginDiagnosis(attempts), code: 'AUTH');
   }
 
   String get _host => Uri.tryParse(_credentials.baseUrl)?.host ?? _credentials.baseUrl;
@@ -181,8 +191,10 @@ class GwnApiClient implements GwnApi {
       lead = 'Could not reach $host at all. Check the tablet has internet, and that the Region matches the data centre '
           'your GWN account lives on.';
     } else if (rejected) {
-      lead = '$host answered but rejected the credentials. Check the App ID and Secret Key, and that the Open API is '
-          'enabled for this account.';
+      final others = GwnEndpoints.hosts.entries.where((e) => !e.value.contains(host)).map((e) => e.key).join(' or ');
+      lead = '$host answered the token request and rejected it. A GWN account belongs to one data centre, so the most '
+          'likely cause is the Region: if this App ID was issued on another one, try $others. Otherwise re-check the '
+          'App ID and Secret Key, and that the Open API is enabled for this account.';
     } else if (notFound) {
       lead = '$host is reachable but has no token endpoint at any path this build knows. The Open API paths in '
           'GwnEndpoints need to be set from the developer portal.';
@@ -213,7 +225,7 @@ class GwnApiClient implements GwnApi {
 
   // ------------------------------------------------------------ requests
 
-  Future<Map<String, Object?>> _raw(String method, String path, {Map<String, Object?>? body, Map<String, Object?>? query, bool auth = false, Dio? dio}) async {
+  Future<Map<String, Object?>> _raw(String method, String path, {Object? body, Map<String, Object?>? query, bool auth = false, Dio? dio, Map<String, String>? headers}) async {
     _requestCount++;
     Response<Object?> res;
     try {
@@ -223,7 +235,10 @@ class GwnApiClient implements GwnApi {
         queryParameters: query,
         options: Options(
           method: method,
-          headers: auth && _token != null ? {'Authorization': 'Bearer $_token'} : null,
+          headers: {
+            ...?headers,
+            if (auth && _token != null) 'Authorization': 'Bearer $_token',
+          },
           // Always take the body as text and decode it here. Letting Dio
           // parse it means a non-JSON error page raises a transport error
           // with no status code, which reads as "the network is down" when
@@ -241,11 +256,13 @@ class GwnApiClient implements GwnApi {
       }
       throw GwnApiException('Network error: ${e.message ?? e.type.name}', endpoint: path);
     }
+    // The server's own words are the most useful thing it returns on a
+    // rejection, so carry them rather than a generic "rejected".
     if (res.statusCode == 401 || res.statusCode == 403) {
-      throw GwnApiException('Rejected by GWN Cloud', endpoint: path, status: res.statusCode, code: 'AUTH');
+      throw GwnApiException('HTTP ${res.statusCode}${_detail(res.data)}', endpoint: path, status: res.statusCode, code: 'AUTH');
     }
     if ((res.statusCode ?? 500) >= 400) {
-      throw GwnApiException('HTTP ${res.statusCode}', endpoint: path, status: res.statusCode);
+      throw GwnApiException('HTTP ${res.statusCode}${_detail(res.data)}', endpoint: path, status: res.statusCode);
     }
     var data = res.data;
     if (data is String) {
@@ -427,6 +444,14 @@ class GwnApiClient implements GwnApi {
       for (final r in rows)
         if ((asString(pick(r, ['id', 'alarmId', 'eventId'])) ?? '').isNotEmpty) GwnAlarm.fromJson(r, networkId: networkId),
     ];
+  }
+
+  /// Whatever the server said about a failure, trimmed to one readable line.
+  static String _detail(Object? data) {
+    final text = data is String ? data : (data == null ? '' : jsonEncode(data));
+    final trimmed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (trimmed.isEmpty) return '';
+    return ' — ${trimmed.length > 240 ? '${trimmed.substring(0, 240)}…' : trimmed}';
   }
 
   /// A statistics row's day, however the payload spells it.

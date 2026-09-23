@@ -54,7 +54,7 @@ void main() {
       'client_id': '667041',
       'client_secret': 's3cret',
     });
-    expect(client.lastProbe['token'], '/oauth/token');
+    expect(client.lastProbe['token'], startsWith('/oauth/token'));
   });
 
   test('signed calls carry appID, timestamp and a signature — never the secret', () async {
@@ -102,18 +102,26 @@ void main() {
     expect(getSeen, greaterThan(0), reason: 'the documented verb is tried first');
   });
 
-  test('a rejected App ID says so, rather than blaming the transport', () async {
-    final server = _FakeServer((_) => _json('{"error":"invalid_client"}', 401));
+  test('a rejection carries the server\'s own words and points at the region', () async {
+    final server = _FakeServer((_) => _json('{"error":"invalid_client","error_description":"app not authorised"}', 401));
     final client = GwnApiClient(credentials: creds, dio: _dioWith(server));
     addTearDown(client.close);
 
     await expectLater(
       client.authenticate(),
       throwsA(isA<GwnApiException>().having((e) => e.message, 'message', allOf(
-        contains('rejected the credentials'),
+        contains('rejected it'),
         contains('www.gwn.cloud'),
+        // A GWN account belongs to one data centre, so name the others.
+        contains('eu.gwn.cloud'),
+        // …and quote what the server actually said.
+        contains('app not authorised'),
       ))),
     );
+
+    // Rejected once, the standard client_credentials spellings are tried too.
+    expect(server.seen.map((o) => o.method).toSet(), containsAll(<String>['GET', 'POST']));
+    expect(server.seen.length, 3);
   });
 
   test('an unreachable host blames the network, not a closed transport', () async {
