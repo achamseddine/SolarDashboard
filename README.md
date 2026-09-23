@@ -107,11 +107,27 @@ The **infrastructure × adoption matrix** keeps its two axes independent: infras
 usage on the other. That is what separates a school needing a technician from one needing training.
 Tapping a quadrant opens the school list filtered to it.
 
-> **Endpoint paths are not yet confirmed.** `doc.grandstream.dev` was unreachable from the build
-> environment, so `lib/core/api/gwn_endpoints.dart` lists candidate paths and token field spellings
-> and the client keeps whichever the account accepts. *Settings → Test connection* reports what it
-> settled on. Replace each candidate list with the documented path once known; nothing outside that
-> file changes.
+### How the Open API is called
+
+`doc.grandstream.dev` is unreachable from the build environment, so the wire format was established
+from published community examples of the GWN Manager API rather than the developer portal. Two
+things follow from that, both isolated in `lib/core/api/`:
+
+* **Token** — `GET {host}/oauth/token?grant_type=client_credentials&client_id=APP_ID&client_secret=SECRET_KEY`.
+  It sits at the host root, *not* under `/oapi/v1.0.0`; assuming otherwise made every path answer 404.
+* **Signed calls** — the secret key takes part in the signature but is never transmitted:
+
+  ```
+  params    = access_token=…&appID=…&secretKey=…&timestamp=…   (ms since epoch)
+  bodyHash  = sha256(compact JSON body)
+  signature = sha256("&" + params + "&" + bodyHash + "&")
+  query     = access_token, appID, timestamp, signature
+  ```
+
+Endpoints confirmed by those examples (`network/list`, `ap/list`, `device/info`) are named
+directly; the statistics and alarm paths are still candidate lists the client probes, and
+*Settings → Test connection* reports which one the account accepted. Replace a candidate list with
+the documented path once known — nothing outside `gwn_endpoints.dart` changes.
 
 ### Release signing
 

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:dio/dio.dart';
 
 import '../models/gwn.dart';
@@ -101,41 +103,67 @@ class GwnApiClient implements GwnApi {
     if (!_credentials.isComplete) {
       throw GwnApiException('GWN Cloud credentials are incomplete', code: 'AUTH');
     }
-    // Each probe gets its own transport: a failed attempt used to close the
-    // shared one, so every later candidate reported "Dio can't establish a
-    // new connection after it was closed" and buried the real first error.
-    final attempts = <String>[];
-    for (final path in GwnEndpoints.tokenCandidates) {
-      for (final fields in GwnEndpoints.tokenFieldSpellings) {
-        final probe = _newDio();
-        try {
-          final json = await _raw('POST', path, dio: probe, body: {
-            fields.id: _credentials.appId.trim(),
-            fields.secret: _credentials.secretKey.trim(),
-            'grant_type': 'client_credentials',
-          });
-          final token = asString(pick(json, ['access_token', 'accessToken', 'token'])) ??
-              asString(pick(asMap(pick(json, ['data', 'result'])), ['access_token', 'accessToken', 'token']));
-          if (token == null || token.isEmpty) {
-            attempts.add('$path (${fields.id}): answered, but carried no token');
-            continue;
-          }
-          _token = token;
-          final ttl = asInt(pick(json, ['expires_in', 'expiresIn', 'expire'])) ??
-              asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
-          _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
-          lastProbe['token'] = '$path (${fields.id})';
-          return;
-        } on GwnApiException catch (e) {
-          attempts.add('$path (${fields.id}): ${e.status == null ? e.message : 'HTTP ${e.status}'}');
-        } catch (e) {
-          attempts.add('$path (${fields.id}): $e');
-        } finally {
-          probe.close(force: true);
-        }
+    // The token sits at the host root, not under the API prefix, and takes
+    // its arguments as query parameters on a GET.
+    final probe = _newDio();
+    try {
+      final json = await _raw('GET', GwnEndpoints.token, dio: probe, query: {
+        'grant_type': 'client_credentials',
+        'client_id': _credentials.appId.trim(),
+        'client_secret': _credentials.secretKey.trim(),
+      });
+      final token = asString(pick(json, ['access_token', 'accessToken', 'token'])) ??
+          asString(pick(asMap(pick(json, ['data', 'result'])), ['access_token', 'accessToken', 'token']));
+      if (token == null || token.isEmpty) {
+        throw GwnApiException(
+          '$_host answered the token request but returned no access_token. '
+          'Check that the Open API is enabled for this App ID.',
+          code: 'AUTH',
+        );
       }
+      _token = token;
+      final ttl = asInt(pick(json, ['expires_in', 'expiresIn', 'expire'])) ??
+          asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
+      _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
+      lastProbe['token'] = GwnEndpoints.token;
+    } on GwnApiException catch (e) {
+      if (e.code == 'AUTH' && e.status == null) rethrow;
+      throw GwnApiException(_loginDiagnosis(['${GwnEndpoints.token}: ${e.status == null ? e.message : 'HTTP ${e.status}'}']), code: 'AUTH');
+    } finally {
+      probe.close(force: true);
     }
-    throw GwnApiException(_loginDiagnosis(attempts), code: 'AUTH');
+  }
+
+  String get _host => Uri.tryParse(_credentials.baseUrl)?.host ?? _credentials.baseUrl;
+
+  /// Signs a call the way the Open API expects: the secret key takes part in
+  /// the signature but is never transmitted.
+  ///
+  ///   params    = access_token=..&appID=..&secretKey=..&timestamp=..
+  ///   bodyHash  = sha256(compact json body)
+  ///   signature = sha256("&" + params + "&" + bodyHash + "&")
+  ///
+  /// and the query carries access_token, appID, timestamp and signature.
+  Map<String, Object?> _signedQuery(Map<String, Object?> body) {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final appId = _credentials.appId.trim();
+    final bodyHash = sha256.convert(utf8.encode(jsonEncode(body))).toString();
+    final params = 'access_token=$_token&appID=$appId&secretKey=${_credentials.secretKey.trim()}&timestamp=$ts';
+    final signature = sha256.convert(utf8.encode('&$params&$bodyHash&')).toString();
+    return {'access_token': _token, 'appID': appId, 'timestamp': ts, 'signature': signature};
+  }
+
+  /// One signed call. Retries with the other verb when the endpoint answers
+  /// 404/405, since the reference examples disagree on GET vs POST.
+  Future<Map<String, Object?>> _call(String method, String path, {Map<String, Object?> body = const {}}) async {
+    await authenticate();
+    try {
+      return await _raw(method, path, query: _signedQuery(body), body: body);
+    } on GwnApiException catch (e) {
+      if (e.status != 404 && e.status != 405) rethrow;
+      final other = method == 'GET' ? 'POST' : 'GET';
+      return _raw(other, path, query: _signedQuery(body), body: body);
+    }
   }
 
   /// Turns the probe log into something an operator can act on: whether the
@@ -236,40 +264,44 @@ class GwnApiClient implements GwnApi {
     throw GwnApiException('Unexpected payload of type ${data.runtimeType}', endpoint: path, status: res.statusCode);
   }
 
-  /// Fetches every page of a list endpoint, probing the candidate paths on the
-  /// first call and the paging spelling until one actually advances.
-  Future<List<Map<String, Object?>>> _list(String key, List<String> candidates, {Map<String, Object?>? query}) async {
-    await authenticate();
+  /// Every page of a signed list endpoint. Paging parameters travel in the
+  /// body, so they take part in the signature.
+  Future<List<Map<String, Object?>>> _pagedCall(
+    String key,
+    List<({String path, String method})> candidates, {
+    Map<String, Object?> body = const {},
+  }) async {
     final known = lastProbe[key];
-    final paths = known == null ? candidates : [known, ...candidates.where((p) => p != known)];
-    Object? lastError;
-    for (final path in paths) {
+    final ordered = known == null
+        ? candidates
+        : [...candidates.where((c) => c.path == known), ...candidates.where((c) => c.path != known)];
+    final attempts = <String>[];
+    for (final ep in ordered) {
       try {
-        final rows = await _paged(path, query ?? const {});
-        lastProbe[key] = path;
+        final rows = await _pages(ep, body);
+        lastProbe[key] = ep.path;
         return rows;
       } on GwnApiException catch (e) {
         if (e.isAuthError) rethrow;
-        lastError = e;
+        attempts.add('${ep.path}: ${e.status == null ? e.message : 'HTTP ${e.status}'}');
       }
     }
     throw GwnApiException(
-      'No GWN Cloud path answered for "$key". Confirm it in GwnEndpoints'
-      '${lastError == null ? '' : ' (last error: $lastError)'}',
-      endpoint: candidates.first,
+      'No GWN Cloud endpoint answered for "$key" on $_host. Tried: ${attempts.join('; ')}',
+      endpoint: candidates.first.path,
     );
   }
 
-  Future<List<Map<String, Object?>>> _paged(String path, Map<String, Object?> query) async {
-    final spellings = _paging[path] == null ? GwnEndpoints.pagingSpellings : [_paging[path]!];
+  Future<List<Map<String, Object?>>> _pages(({String path, String method}) ep, Map<String, Object?> body) async {
+    final spellings = _paging[ep.path] == null ? GwnEndpoints.pagingSpellings : [_paging[ep.path]!];
     for (final sp in spellings) {
       final all = <Map<String, Object?>>[];
       final seen = <String>{};
       var page = sp.page == 'offset' ? 0 : 1;
       int? total;
       for (var guard = 0; guard < 200; guard++) {
-        final json = await _raw('GET', path, auth: true, query: {
-          ...query,
+        final json = await _call(ep.method, ep.path, body: {
+          ...body,
           sp.page: sp.page == 'offset' ? all.length : page,
           sp.size: GwnEndpoints.pageSize,
         });
@@ -281,8 +313,7 @@ class GwnApiClient implements GwnApi {
           if (inner.isNotEmpty) rows = firstList(inner, GwnEndpoints.listKeys);
         }
         if (rows.isEmpty) break;
-        // A server that ignores the paging parameters keeps replying with the
-        // same rows; detect that rather than looping forever.
+        // A server ignoring the paging parameters repeats the same rows.
         final fingerprint = rows.map((r) => r.values.take(3).join('|')).join(';');
         if (!seen.add(fingerprint)) break;
         all.addAll(rows);
@@ -291,7 +322,7 @@ class GwnApiClient implements GwnApi {
         page++;
       }
       if (all.isNotEmpty) {
-        _paging[path] = sp;
+        _paging[ep.path] = sp;
         return all;
       }
     }
@@ -302,7 +333,7 @@ class GwnApiClient implements GwnApi {
 
   @override
   Future<List<GwnNetwork>> listNetworks() async {
-    final rows = await _list('networks', GwnEndpoints.networkListCandidates);
+    final rows = await _pagedCall('networks', [GwnEndpoints.networkList]);
     return [
       for (final r in rows)
         if ((asString(pick(r, ['id', 'networkId', 'network_id', 'nid'])) ?? '').isNotEmpty) GwnNetwork.fromJson(r),
@@ -311,17 +342,33 @@ class GwnApiClient implements GwnApi {
 
   @override
   Future<List<GwnDevice>> listDevices(String networkId) async {
-    final rows = await _list('devices', GwnEndpoints.deviceListCandidates, query: {'network_id': networkId, 'networkId': networkId});
-    return [
-      for (final r in rows)
-        if ((asString(pick(r, ['mac', 'macAddress', 'mac_address', 'deviceMac'])) ?? '').isNotEmpty)
-          GwnDevice.fromJson(r, networkId: networkId),
-    ];
+    final body = {'network_id': networkId, 'networkId': networkId};
+    final out = <GwnDevice>[];
+    // Access points come from their own endpoint; switches and the gateway
+    // from whichever device list the account exposes.
+    for (final entry in [
+      ('aps', [GwnEndpoints.apList]),
+      ('devices', GwnEndpoints.switchListCandidates),
+    ]) {
+      try {
+        final rows = await _pagedCall(entry.$1, entry.$2, body: body);
+        for (final r in rows) {
+          if ((asString(pick(r, ['mac', 'macAddress', 'mac_address', 'deviceMac'])) ?? '').isEmpty) continue;
+          final d = GwnDevice.fromJson(r, networkId: networkId);
+          if (out.any((x) => x.mac == d.mac)) continue;
+          out.add(d);
+        }
+      } on GwnApiException catch (e) {
+        if (e.isAuthError) rethrow;
+        // One of the two lists missing is not fatal: the other still counts.
+      }
+    }
+    return out;
   }
 
   @override
   Future<List<GwnNetworkDay>> networkDaily(String networkId, String fromDay, String toDay) async {
-    final rows = await _list('networkStats', GwnEndpoints.networkStatsCandidates, query: {
+    final rows = await _pagedCall('networkStats', GwnEndpoints.clientStatsCandidates, body: {
       'network_id': networkId,
       'networkId': networkId,
       'start': fromDay,
@@ -349,7 +396,7 @@ class GwnApiClient implements GwnApi {
 
   @override
   Future<List<GwnSsidDay>> ssidDaily(String networkId, String fromDay, String toDay) async {
-    final rows = await _list('ssidStats', GwnEndpoints.ssidStatsCandidates, query: {
+    final rows = await _pagedCall('ssidStats', GwnEndpoints.ssidStatsCandidates, body: {
       'network_id': networkId,
       'networkId': networkId,
       'start': fromDay,
@@ -371,7 +418,7 @@ class GwnApiClient implements GwnApi {
 
   @override
   Future<List<GwnAlarm>> listAlarms({String? networkId, int? sinceTs}) async {
-    final rows = await _list('alarms', GwnEndpoints.alarmListCandidates, query: {
+    final rows = await _pagedCall('alarms', GwnEndpoints.alarmCandidates, body: {
       'network_id': ?networkId,
       'networkId': ?networkId,
       'startTime': ?sinceTs,
