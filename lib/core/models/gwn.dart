@@ -240,6 +240,8 @@ class GwnNetworkDay {
     this.apsTotal,
     this.activeAps,
     this.teachingHoursBytes,
+    this.observations,
+    this.onlineObservations,
   });
 
   final String networkId;
@@ -261,12 +263,22 @@ class GwnNetworkDay {
   /// Bytes inside the defined teaching hours, when the source can split it.
   final int? teachingHoursBytes;
 
+  /// How many times the app looked at this network during the day, and how
+  /// many of those it was up. The cloud exposes no history, so uptime is
+  /// sampled from the app's own observations rather than reported.
+  final int? observations;
+  final int? onlineObservations;
+
   int? get totalBytes => rxBytes == null && txBytes == null ? null : (rxBytes ?? 0) + (txBytes ?? 0);
 
   double? get uptimeShare {
+    // Minutes when the source reports them; otherwise the share of the app's
+    // own observations that found the network up.
     final up = wanUpMinutes, exp = expectedMinutes;
-    if (up == null || exp == null || exp <= 0) return null;
-    return (up / exp).clamp(0.0, 1.0);
+    if (up != null && exp != null && exp > 0) return (up / exp).clamp(0.0, 1.0);
+    final n = observations, on = onlineObservations;
+    if (n == null || on == null || n <= 0) return null;
+    return (on / n).clamp(0.0, 1.0);
   }
 
   factory GwnNetworkDay.fromRow(Map<String, Object?> r) => GwnNetworkDay(
@@ -282,6 +294,8 @@ class GwnNetworkDay {
         apsTotal: r['aps_total'] as int?,
         activeAps: r['active_aps'] as int?,
         teachingHoursBytes: r['teaching_bytes'] as int?,
+        observations: r['observations'] as int?,
+        onlineObservations: r['online_observations'] as int?,
       );
 
   Map<String, Object?> toRow() => {
@@ -297,6 +311,8 @@ class GwnNetworkDay {
         'aps_total': apsTotal,
         'active_aps': activeAps,
         'teaching_bytes': teachingHoursBytes,
+        'observations': observations,
+        'online_observations': onlineObservations,
       };
 }
 

@@ -60,10 +60,26 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
     try {
       await client.authenticate();
       final networks = await client.listNetworks();
+      // Pull one network's detail and devices too: which fields the account
+      // actually returns is the thing worth knowing, and it cannot be
+      // guessed from the outside.
+      if (networks.isNotEmpty) {
+        final id = networks.first.id;
+        try {
+          await client.listDevices(id);
+        } catch (_) {}
+        try {
+          await client.networkDaily(id, '', DateTime.now().toIso8601String().substring(0, 10));
+        } catch (_) {}
+      }
       setState(() {
         _ok = true;
-        _result = 'Connected. ${networks.length} networks visible. '
-            'Paths used: ${client.lastProbe.entries.map((e) => '${e.key} → ${e.value}').join(', ')}';
+        _result = [
+          'Connected. ${networks.length} networks visible.',
+          'Paths: ${client.lastProbe.entries.map((e) => '${e.key} → ${e.value}').join(', ')}',
+          if (client.fieldsSeen.isNotEmpty)
+            'Fields returned:\n${client.fieldsSeen.entries.map((e) => '  • ${e.key}: ${e.value.join(', ')}').join('\n')}',
+        ].join('\n');
       });
     } catch (e) {
       setState(() {

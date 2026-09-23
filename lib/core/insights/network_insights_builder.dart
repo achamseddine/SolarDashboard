@@ -30,6 +30,7 @@ class NetworkInsightsBuilder {
   /// Indicators in the framework that need a source the app is not connected
   /// to. Shown in the UI so an empty tile explains itself.
   static const missingSources = <({String indicator, String source})>[
+    (indicator: 'Historical uptime, traffic and client counts', source: 'The GWN Open API exposes no statistics endpoints, so the app builds the series from its own repeated observations — it deepens each day the app syncs'),
     (indicator: 'Download and upload speed, latency, packet loss, jitter', source: 'Independent internet monitoring or scheduled speed tests'),
     (indicator: 'Contracted bandwidth, actual vs contracted, ISP SLA compliance', source: 'ISP contract and package data'),
     (indicator: 'Learning-platform users, active teachers and students, sessions', source: 'Madristi / Learning Passport platform analytics'),

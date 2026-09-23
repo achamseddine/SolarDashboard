@@ -1,4 +1,5 @@
 import '../api/gwn_api.dart';
+import '../api/gwn_api_client.dart';
 import '../api/json_utils.dart';
 import '../db/app_database.dart';
 import '../models/gwn.dart';
@@ -136,7 +137,19 @@ class NetworkSync {
 
       final day = await part('daily counters', n, () async {
         final list = await api.networkDaily(n.id, fromDay, toDay);
-        await db.networks.upsertDaily(list);
+        if (list.isEmpty) return 0;
+        // One row for today is a live observation to fold into the day; a
+        // real series (demo, or a cloud that does expose history) is stored
+        // as given.
+        if (list.length == 1 && list.single.day == toDay) {
+          final devices = await db.networks.getDevices(networkId: n.id);
+          final up = devices.isEmpty
+              ? (list.single.apsOnline ?? 0) > 0
+              : devices.any((x) => x.isOnline);
+          await db.networks.recordObservation(list.single, online: up);
+        } else {
+          await db.networks.upsertDaily(list);
+        }
         return list.length;
       });
       if (day < 0) {
@@ -147,8 +160,10 @@ class NetworkSync {
 
       final ssid = await part('per-SSID traffic', n, () async {
         final list = await api.ssidDaily(n.id, fromDay, toDay);
-        await db.networks.upsertSsidDaily(list);
-        return list.length;
+        // SSIDs without traffic figures are names only — not worth a row.
+        final withTraffic = list.where((x) => (x.bytes ?? 0) > 0).toList();
+        await db.networks.upsertSsidDaily(withTraffic);
+        return withTraffic.length;
       });
       if (ssid < 0) {
         failed = true;
@@ -178,6 +193,11 @@ class NetworkSync {
       beforeTs: now.subtract(const Duration(days: keepDays)).millisecondsSinceEpoch ~/ 1000,
     );
     db.notifyChanged();
+
+    final client = api;
+    if (client is GwnApiClient) {
+      client.fieldsSeen.forEach((k, v) => notes['fields:$k'] = v.join(', '));
+    }
 
     return NetworkSyncReport(
       networks: networks.length,

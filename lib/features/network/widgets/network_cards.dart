@@ -331,7 +331,11 @@ class NetworkTrendCard extends StatelessWidget {
     if (d.dailyClients.isEmpty) {
       return const SectionCard(
         title: 'Use over time',
-        child: EmptyState(message: 'No daily counters in the window yet.', icon: Icons.show_chart),
+        child: EmptyState(
+          message: 'No daily counters yet. The cloud exposes no usage history, so this series is built from the '
+              'app\'s own observations — it fills in from the next sync onwards, one point per day.',
+          icon: Icons.show_chart,
+        ),
       );
     }
     final p = ChartPalette.of(context);
@@ -391,7 +395,11 @@ class SsidSplitCard extends StatelessWidget {
     if (rows.isEmpty) {
       return const SectionCard(
         title: 'Traffic by SSID',
-        child: EmptyState(message: 'The account reported no per-SSID traffic.', icon: Icons.wifi_tethering),
+        child: EmptyState(
+          message: 'This GWN API version lists SSIDs but reports no traffic against them, so the staff / student / '
+              'admin split cannot be computed from it.',
+          icon: Icons.wifi_tethering,
+        ),
       );
     }
     final p = ChartPalette.of(context);

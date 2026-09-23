@@ -75,7 +75,6 @@ class GwnApiClient implements GwnApi {
   final Map<String, String> lastProbe = {};
 
   /// Paging spelling proven to work, per path.
-  final Map<String, ({String page, String size})> _paging = {};
 
   int _requestCount = 0;
   int get requestCount => _requestCount;
@@ -297,6 +296,7 @@ class GwnApiClient implements GwnApi {
       try {
         final rows = await _pages(ep, body);
         lastProbe[key] = ep.path;
+        _noteFields(key, rows);
         return rows;
       } on GwnApiException catch (e) {
         if (e.isAuthError) rethrow;
@@ -310,47 +310,46 @@ class GwnApiClient implements GwnApi {
   }
 
   Future<List<Map<String, Object?>>> _pages(({String path, String method}) ep, Map<String, Object?> body) async {
-    final spellings = _paging[ep.path] == null ? GwnEndpoints.pagingSpellings : [_paging[ep.path]!];
-    for (final sp in spellings) {
-      final all = <Map<String, Object?>>[];
-      final seen = <String>{};
-      var page = sp.page == 'offset' ? 0 : 1;
-      int? total;
-      for (var guard = 0; guard < 200; guard++) {
-        final json = await _call(ep.method, ep.path, body: {
-          ...body,
-          sp.page: sp.page == 'offset' ? all.length : page,
-          sp.size: GwnEndpoints.pageSize,
-        });
-        total ??= asInt(pick(json, GwnEndpoints.totalKeys)) ??
-            asInt(pick(asMap(pick(json, ['data', 'result'])), GwnEndpoints.totalKeys));
-        var rows = firstList(json, GwnEndpoints.listKeys);
-        if (rows.isEmpty) {
-          final inner = asMap(pick(json, ['data', 'result']));
-          if (inner.isNotEmpty) rows = firstList(inner, GwnEndpoints.listKeys);
-        }
-        if (rows.isEmpty) break;
-        // A server ignoring the paging parameters repeats the same rows.
-        final fingerprint = rows.map((r) => r.values.take(3).join('|')).join(';');
-        if (!seen.add(fingerprint)) break;
-        all.addAll(rows);
-        if (rows.length < GwnEndpoints.pageSize) break;
-        if (total != null && all.length >= total) break;
-        page++;
+    final sp = GwnEndpoints.paging;
+    final all = <Map<String, Object?>>[];
+    final seen = <String>{};
+    var page = 1;
+    int? total;
+    for (var guard = 0; guard < 200; guard++) {
+      final json = await _call(ep.method, ep.path, body: {...body, sp.page: page, sp.size: GwnEndpoints.pageSize});
+      total ??= asInt(pick(json, GwnEndpoints.totalKeys)) ??
+          asInt(pick(asMap(pick(json, ['data', 'result'])), GwnEndpoints.totalKeys));
+      var rows = firstList(json, GwnEndpoints.listKeys);
+      if (rows.isEmpty) {
+        final inner = asMap(pick(json, ['data', 'result']));
+        if (inner.isNotEmpty) rows = firstList(inner, GwnEndpoints.listKeys);
       }
-      if (all.isNotEmpty) {
-        _paging[ep.path] = sp;
-        return all;
-      }
+      if (rows.isEmpty) break;
+      // A server ignoring the paging parameters repeats the same rows.
+      final fingerprint = rows.map((r) => r.values.take(3).join('|')).join(';');
+      if (!seen.add(fingerprint)) break;
+      all.addAll(rows);
+      if (rows.length < GwnEndpoints.pageSize) break;
+      if (total != null && all.length >= total) break;
+      page++;
     }
-    return const [];
+    return all;
+  }
+
+  /// Field names the first row of each endpoint carried. Names only, never
+  /// values — enough to confirm the mapping without moving any data.
+  final Map<String, List<String>> fieldsSeen = {};
+
+  void _noteFields(String key, List<Map<String, Object?>> rows) {
+    if (rows.isEmpty || fieldsSeen.containsKey(key)) return;
+    fieldsSeen[key] = rows.first.keys.toList()..sort();
   }
 
   // --------------------------------------------------------------- calls
 
   @override
   Future<List<GwnNetwork>> listNetworks() async {
-    final rows = await _pagedCall('networks', [GwnEndpoints.networkList]);
+    final rows = await _pagedCall('networks', [GwnEndpoints.networkList], body: {...GwnEndpoints.listBody(), 'type': ''});
     return [
       for (final r in rows)
         if ((asString(pick(r, ['id', 'networkId', 'network_id', 'nid'])) ?? '').isNotEmpty) GwnNetwork.fromJson(r),
@@ -359,7 +358,7 @@ class GwnApiClient implements GwnApi {
 
   @override
   Future<List<GwnDevice>> listDevices(String networkId) async {
-    final body = {'network_id': networkId, 'networkId': networkId};
+    final body = GwnEndpoints.listBody(networkId: networkId);
     final out = <GwnDevice>[];
     // Access points come from their own endpoint; switches and the gateway
     // from whichever device list the account exposes.
@@ -383,52 +382,66 @@ class GwnApiClient implements GwnApi {
     return out;
   }
 
+  /// This API version has no statistics family, so there is no history to
+  /// fetch: the best it can give is the network as it stands right now.
+  /// One row is returned, for today, and [NetworkSync] merges it into the
+  /// day's accruing counters. The series the framework needs therefore grows
+  /// from the app's own observations, one sync at a time.
   @override
   Future<List<GwnNetworkDay>> networkDaily(String networkId, String fromDay, String toDay) async {
-    final rows = await _pagedCall('networkStats', GwnEndpoints.clientStatsCandidates, body: {
-      'network_id': networkId,
-      'networkId': networkId,
-      'start': fromDay,
-      'end': toDay,
-      'granularity': 'day',
-    });
+    final detail = await _networkDetail(networkId);
+    if (detail.isEmpty) return const [];
+    _noteFields('networkDetail', [detail]);
+
+    final clients = asInt(pick(detail, ['clientCount', 'clientNum', 'clients', 'staCount', 'onlineClient', 'userCount']));
+    final apsOnline = asInt(pick(detail, ['onlineAp', 'apOnline', 'apsOnline', 'onlineDevice', 'onlineNum']));
+    final apsTotal = asInt(pick(detail, ['apTotal', 'totalAp', 'apsTotal', 'deviceCount', 'totalNum']));
+    final rx = asInt(pick(detail, ['rxBytes', 'downloadBytes', 'download', 'rx', 'downTraffic']));
+    final tx = asInt(pick(detail, ['txBytes', 'uploadBytes', 'upload', 'tx', 'upTraffic']));
+    final usage = asInt(pick(detail, ['usage', 'traffic', 'totalTraffic', 'flow']));
+
     return [
-      for (final r in rows)
-        if (_day(r) != null)
-          GwnNetworkDay(
-            networkId: networkId,
-            day: _day(r)!,
-            wanUpMinutes: asInt(pick(r, ['upMinutes', 'onlineMinutes', 'uptimeMinutes'])),
-            expectedMinutes: asInt(pick(r, ['expectedMinutes', 'totalMinutes'])) ?? 1440,
-            rxBytes: asInt(pick(r, ['rxBytes', 'rx', 'downloadBytes', 'download'])),
-            txBytes: asInt(pick(r, ['txBytes', 'tx', 'uploadBytes', 'upload'])),
-            uniqueClients: asInt(pick(r, ['clients', 'clientCount', 'uniqueClients', 'staCount'])),
-            peakClients: asInt(pick(r, ['peakClients', 'maxClients', 'concurrentMax'])),
-            apsOnline: asInt(pick(r, ['apsOnline', 'onlineAp', 'apOnline'])),
-            apsTotal: asInt(pick(r, ['apsTotal', 'totalAp', 'apTotal'])),
-            activeAps: asInt(pick(r, ['activeAps', 'apActive'])),
-          ),
+      GwnNetworkDay(
+        networkId: networkId,
+        day: toDay,
+        rxBytes: rx ?? (usage == null ? null : (usage * 0.8).round()),
+        txBytes: tx ?? (usage == null ? null : (usage * 0.2).round()),
+        uniqueClients: clients,
+        peakClients: clients,
+        apsOnline: apsOnline,
+        apsTotal: apsTotal,
+        activeAps: clients == null || clients == 0 ? 0 : apsOnline,
+      ),
     ];
   }
 
+  Future<Map<String, Object?>> _networkDetail(String networkId) async {
+    await authenticate();
+    try {
+      final json = await _call(GwnEndpoints.networkDetail.method, GwnEndpoints.networkDetail.path, body: {'id': networkId});
+      final inner = asMap(pick(json, ['data', 'result']));
+      return inner.isNotEmpty ? inner : json;
+    } on GwnApiException catch (e) {
+      if (e.isAuthError) rethrow;
+      return const {};
+    }
+  }
+
+  /// Per-SSID traffic is not exposed by this API version. The SSID list is
+  /// fetched so the names are known, but it carries no traffic, and the
+  /// dashboards say so rather than showing an empty chart.
   @override
   Future<List<GwnSsidDay>> ssidDaily(String networkId, String fromDay, String toDay) async {
-    final rows = await _pagedCall('ssidStats', GwnEndpoints.ssidStatsCandidates, body: {
-      'network_id': networkId,
-      'networkId': networkId,
-      'start': fromDay,
-      'end': toDay,
-      'granularity': 'day',
-    });
+    final rows = await _pagedCall('ssids', [GwnEndpoints.ssidList], body: GwnEndpoints.listBody(networkId: networkId));
     return [
       for (final r in rows)
-        if (_day(r) != null && (asString(pick(r, ['ssid', 'ssidName'])) ?? '').isNotEmpty)
+        if ((asString(pick(r, ['ssid', 'ssidName', 'name'])) ?? '').isNotEmpty)
           GwnSsidDay(
             networkId: networkId,
-            day: _day(r)!,
-            ssid: asString(pick(r, ['ssid', 'ssidName']))!,
-            bytes: asInt(pick(r, ['bytes', 'totalBytes', 'traffic'])),
-            clients: asInt(pick(r, ['clients', 'clientCount'])),
+            day: toDay,
+            ssid: asString(pick(r, ['ssid', 'ssidName', 'name']))!,
+            bytes: asInt(pick(r, ['bytes', 'totalBytes', 'traffic', 'usage'])),
+            clients: asInt(pick(r, ['clients', 'clientCount', 'clientNum'])),
           ),
     ];
   }
@@ -436,8 +449,7 @@ class GwnApiClient implements GwnApi {
   @override
   Future<List<GwnAlarm>> listAlarms({String? networkId, int? sinceTs}) async {
     final rows = await _pagedCall('alarms', GwnEndpoints.alarmCandidates, body: {
-      'network_id': ?networkId,
-      'networkId': ?networkId,
+      ...GwnEndpoints.listBody(networkId: networkId),
       'startTime': ?sinceTs,
     });
     return [
@@ -454,14 +466,4 @@ class GwnApiClient implements GwnApi {
     return ' — ${trimmed.length > 240 ? '${trimmed.substring(0, 240)}…' : trimmed}';
   }
 
-  /// A statistics row's day, however the payload spells it.
-  static String? _day(Map<String, Object?> r) {
-    final raw = pick(r, ['day', 'date', 'statDate', 'time', 'timestamp']);
-    final s = asString(raw);
-    if (s != null && RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) return s.substring(0, 10);
-    final ts = asEpochSeconds(raw);
-    if (ts == null) return null;
-    final d = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
-    return ymd(d);
-  }
 }

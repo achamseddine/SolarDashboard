@@ -124,10 +124,20 @@ things follow from that, both isolated in `lib/core/api/`:
   query     = access_token, appID, timestamp, signature
   ```
 
-Endpoints confirmed by those examples (`network/list`, `ap/list`, `device/info`) are named
-directly; the statistics and alarm paths are still candidate lists the client probes, and
-*Settings → Test connection* reports which one the account accepted. Replace a candidate list with
-the documented path once known — nothing outside `gwn_endpoints.dart` changes.
+Confirmed endpoints — `network/list` (GET), `network/detail`, `ap/list`, `ssid/list` (POST) — are
+named directly and take the documented body (`networkId`, `search`, `order`, `pageNum`, `pageSize`).
+Switch and alarm paths are still candidate lists the client probes.
+
+**This API version exposes no time series.** There is no `statistics/*` or `report/*` family: only
+list and detail endpoints, each describing the network as it stands right now. The daily counters
+every usage indicator needs are therefore *accrued by the app*, not fetched — each sync folds one
+observation into the day (peak clients keep the highest seen, uptime is the share of observations
+that found the network up), so the history deepens the longer the app runs. The dashboards say this
+rather than showing an empty chart, and a reported figure always wins over a sampled one when the
+cloud does provide it.
+
+*Settings → Test connection* reports which paths answered **and the field names each returned**,
+which is what the parsing has to be matched against.
 
 ### Release signing
 

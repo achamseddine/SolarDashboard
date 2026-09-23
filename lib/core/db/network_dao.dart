@@ -104,6 +104,43 @@ class NetworkDao {
     await _replaceAll('gwn_network_daily', [for (final d in days) d.toRow()]);
   }
 
+  /// Folds one live observation into the day's row.
+  ///
+  /// The cloud exposes no history, so a day is built from repeated looks:
+  /// the peak client count is the highest seen, traffic and AP counts take
+  /// the latest reading, and uptime is the share of observations that found
+  /// the network up. Replacing the row instead would keep only the last look
+  /// and lose the day.
+  Future<void> recordObservation(GwnNetworkDay seen, {required bool online}) async {
+    final rows = await db.query(
+      'gwn_network_daily',
+      where: 'network_id = ? AND day = ?',
+      whereArgs: [seen.networkId, seen.day],
+      limit: 1,
+    );
+    final prev = rows.isEmpty ? null : GwnNetworkDay.fromRow(rows.first);
+
+    int? maxOf(int? a, int? b) => a == null ? b : (b == null ? a : (a > b ? a : b));
+
+    final merged = GwnNetworkDay(
+      networkId: seen.networkId,
+      day: seen.day,
+      wanUpMinutes: seen.wanUpMinutes ?? prev?.wanUpMinutes,
+      expectedMinutes: seen.expectedMinutes ?? prev?.expectedMinutes,
+      rxBytes: seen.rxBytes ?? prev?.rxBytes,
+      txBytes: seen.txBytes ?? prev?.txBytes,
+      uniqueClients: maxOf(seen.uniqueClients, prev?.uniqueClients),
+      peakClients: maxOf(seen.peakClients, prev?.peakClients),
+      apsOnline: maxOf(seen.apsOnline, prev?.apsOnline),
+      apsTotal: seen.apsTotal ?? prev?.apsTotal,
+      activeAps: maxOf(seen.activeAps, prev?.activeAps),
+      teachingHoursBytes: seen.teachingHoursBytes ?? prev?.teachingHoursBytes,
+      observations: (prev?.observations ?? 0) + 1,
+      onlineObservations: (prev?.onlineObservations ?? 0) + (online ? 1 : 0),
+    );
+    await db.insert('gwn_network_daily', merged.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<List<GwnSsidDay>> getSsidDaily({String? fromDay, String? toDay}) async {
     final where = <String>[];
     final args = <Object?>[];

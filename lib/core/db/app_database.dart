@@ -27,7 +27,8 @@ class AppDatabase {
 
   /// v1: plant/device/energy/alarm tables. v2: school dataset + links.
   /// v3: GWN Cloud networks, devices, daily counters and alarms.
-  static const int schemaVersion = 3;
+  /// v4: observation counters on the GWN daily rows.
+  static const int schemaVersion = 4;
 
   final Database db;
   final StationDao stations;
@@ -89,9 +90,24 @@ class AppDatabase {
   }
 
   static Future<void> _upgrade(Database db, int from, int to) async {
-    // Every version only adds tables/indexes (all CREATE IF NOT EXISTS), so
-    // re-running the schema script is the migration.
+    // New tables and indexes are all CREATE IF NOT EXISTS, so re-running the
+    // schema script covers them. Columns added to a table that already
+    // exists need an explicit ALTER.
     await createSchema(db);
+    await _addColumn(db, 'gwn_network_daily', 'observations', 'INTEGER');
+    await _addColumn(db, 'gwn_network_daily', 'online_observations', 'INTEGER');
+  }
+
+  /// Adds a column unless the table already has it.
+  static Future<void> _addColumn(DatabaseExecutor db, String table, String column, String type) async {
+    try {
+      final info = await db.rawQuery('PRAGMA table_info($table)');
+      if (info.any((r) => r['name'] == column)) return;
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+    } catch (_) {
+      // The table may not exist yet on a fresh database; createSchema made it
+      // with the column already present.
+    }
   }
 
   static Future<void> createSchema(DatabaseExecutor db) async {
@@ -360,6 +376,7 @@ class AppDatabase {
         unique_clients INTEGER, peak_clients INTEGER,
         aps_online INTEGER, aps_total INTEGER, active_aps INTEGER,
         teaching_bytes INTEGER,
+        observations INTEGER, online_observations INTEGER,
         PRIMARY KEY (network_id, day)
       )''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_gwn_daily_day ON gwn_network_daily(day)');

@@ -25,43 +25,44 @@ class GwnEndpoints {
   /// `&client_secret=SECRET_KEY`
   static const String token = '/oauth/token';
 
-  /// One endpoint of the signed API: its path and the verb it expects.
-  /// The client retries with the other verb if the first answers 404 or 405.
+  /// Endpoints confirmed against published examples of this API, with the
+  /// verb and the body keys each takes.
   static const ({String path, String method}) networkList = (path: '$apiPrefix/network/list', method: 'GET');
   static const ({String path, String method}) networkDetail = (path: '$apiPrefix/network/detail', method: 'POST');
   static const ({String path, String method}) apList = (path: '$apiPrefix/ap/list', method: 'POST');
-  static const ({String path, String method}) deviceInfo = (path: '$apiPrefix/device/info', method: 'POST');
+  static const ({String path, String method}) ssidList = (path: '$apiPrefix/ssid/list', method: 'POST');
 
-  /// Not seen in the reference examples; probed in order.
+  /// Switches and gateways are not in the published examples; these are
+  /// probed, and an account that exposes neither simply reports no switches.
   static const List<({String path, String method})> switchListCandidates = [
     (path: '$apiPrefix/switch/list', method: 'POST'),
     (path: '$apiPrefix/device/list', method: 'POST'),
   ];
-  static const List<({String path, String method})> clientStatsCandidates = [
-    (path: '$apiPrefix/statistics/network', method: 'POST'),
-    (path: '$apiPrefix/network/statistics', method: 'POST'),
-    (path: '$apiPrefix/report/network', method: 'POST'),
-  ];
-  static const List<({String path, String method})> ssidStatsCandidates = [
-    (path: '$apiPrefix/statistics/ssid', method: 'POST'),
-    (path: '$apiPrefix/ssid/statistics', method: 'POST'),
-  ];
+
   static const List<({String path, String method})> alarmCandidates = [
     (path: '$apiPrefix/alarm/list', method: 'POST'),
     (path: '$apiPrefix/event/list', method: 'POST'),
     (path: '$apiPrefix/alert/list', method: 'POST'),
   ];
 
+  /// This API version exposes no time-series statistics: there is no
+  /// `statistics/*` or `report/*` family, only the list and detail endpoints
+  /// above. Daily counters are therefore accrued by the app from repeated
+  /// observations rather than fetched — see `NetworkSync`.
+  static const bool exposesHistory = false;
+
+  /// The body a list endpoint expects, alongside its paging parameters.
+  static Map<String, Object?> listBody({String? networkId}) => {
+        'search': '',
+        'order': '',
+        'networkId': ?networkId,
+      };
+
   /// Page size used for list endpoints.
   static const int pageSize = 100;
 
-  /// Page/size parameter namings tried by the paginator, in order.
-  static const List<({String page, String size})> pagingSpellings = [
-    (page: 'pageNum', size: 'pageSize'),
-    (page: 'page', size: 'pageSize'),
-    (page: 'pageNo', size: 'pageSize'),
-    (page: 'offset', size: 'limit'),
-  ];
+  /// Paging, as the published examples spell it.
+  static const ({String page, String size}) paging = (page: 'pageNum', size: 'pageSize');
 
   /// Keys a list payload may hide its rows under.
   static const List<String> listKeys = ['data', 'result', 'list', 'records', 'items', 'rows', 'content'];
