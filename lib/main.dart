@@ -36,6 +36,7 @@ Future<void> main() async {
   final settings = await AppSettings.load(prefs);
   final store = CredentialStore();
   final credentials = await store.load();
+  final gwnCredentials = await store.loadGwn();
   final boundaries = await loadBoundaries();
   final seeds = await importSchoolDataset(db);
 
@@ -48,6 +49,7 @@ Future<void> main() async {
       demoSeedsProvider.overrideWithValue(seeds),
       initialSettingsProvider.overrideWithValue(settings),
       initialCredentialsProvider.overrideWithValue(credentials),
+      initialGwnCredentialsProvider.overrideWithValue(gwnCredentials),
     ],
     child: const SolarMonitorApp(),
   ));

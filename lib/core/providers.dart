@@ -4,16 +4,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api/deye_api.dart';
+import 'api/gwn_api.dart';
+import 'api/json_utils.dart';
+import 'api/gwn_api_client.dart';
 import 'api/deye_api_client.dart';
 import 'db/app_database.dart';
 import 'db/station_dao.dart';
 import 'demo/demo_deye_api.dart';
+import 'demo/demo_gwn_api.dart';
 import 'insights/fleet_insights_builder.dart';
 import 'insights/connectivity_insights_builder.dart';
 import 'insights/education_insights_builder.dart';
+import 'insights/network_insights_builder.dart';
 import 'insights/school_insights_builder.dart';
 import 'models/alert.dart';
 import 'models/credentials.dart';
+import 'models/gwn_credentials.dart';
+import 'models/network_insights.dart';
 import 'models/device.dart';
 import 'models/fleet_insights.dart';
 import 'models/connectivity_insights.dart';
@@ -27,6 +34,7 @@ import 'schools/school_dataset.dart';
 import 'schools/station_school_linker.dart';
 import 'settings/app_settings.dart';
 import 'settings/credential_store.dart';
+import 'sync/network_sync.dart';
 import 'sync/rate_limiter.dart';
 import 'sync/station_region.dart';
 import 'sync/sync_engine.dart';
@@ -41,6 +49,7 @@ final credentialStoreProvider = Provider<CredentialStore>((ref) => CredentialSto
 final boundariesProvider = Provider<LebanonBoundaries?>((ref) => null);
 final initialSettingsProvider = Provider<AppSettings>((ref) => const AppSettings());
 final initialCredentialsProvider = Provider<DeyeCredentials?>((ref) => null);
+final initialGwnCredentialsProvider = Provider<GwnCredentials?>((ref) => null);
 
 /// Real solarised schools used to name/place the demo fleet (from the
 /// bundled dataset; empty when the asset is unavailable).
@@ -94,6 +103,112 @@ class CredentialsNotifier extends Notifier<DeyeCredentials?> {
     state = null;
   }
 }
+
+// ------------------------------------------------------------ GWN Cloud
+
+final gwnCredentialsProvider = NotifierProvider<GwnCredentialsNotifier, GwnCredentials?>(GwnCredentialsNotifier.new);
+
+class GwnCredentialsNotifier extends Notifier<GwnCredentials?> {
+  @override
+  GwnCredentials? build() => ref.read(initialGwnCredentialsProvider);
+
+  Future<void> save(GwnCredentials c) async {
+    await ref.read(credentialStoreProvider).saveGwn(c);
+    state = c;
+  }
+
+  Future<void> clear() async {
+    await ref.read(credentialStoreProvider).deleteGwn();
+    state = null;
+  }
+}
+
+/// True when the school-network dashboards have a source: a configured GWN
+/// account, or demo mode.
+final canSyncNetworksProvider = Provider<bool>((ref) {
+  final demo = ref.watch(settingsProvider.select((s) => s.demoMode));
+  final creds = ref.watch(gwnCredentialsProvider);
+  return demo || (creds?.isComplete ?? false);
+});
+
+/// True when the GWN dashboards are showing synthetic data.
+final gwnIsDemoProvider = Provider<bool>((ref) {
+  final demo = ref.watch(settingsProvider.select((s) => s.demoMode));
+  final creds = ref.watch(gwnCredentialsProvider);
+  return demo || creds == null || !creds.isComplete;
+});
+
+/// The GWN Cloud gateway: the real client when the account is configured,
+/// synthetic data otherwise.
+final gwnApiProvider = Provider<GwnApi>((ref) {
+  final creds = ref.watch(gwnCredentialsProvider);
+  if (ref.watch(gwnIsDemoProvider)) {
+    return DemoGwnApi(seeds: ref.read(demoSeedsProvider));
+  }
+  final api = GwnApiClient(credentials: creds!);
+  ref.onDispose(api.close);
+  return api;
+});
+
+final networkSyncProvider = Provider<NetworkSync>((ref) => NetworkSync(
+      api: ref.read(gwnApiProvider),
+      db: ref.read(databaseProvider),
+      log: (m) => ref.read(appLogProvider.notifier).add(m),
+    ));
+
+/// The last GWN synchronisation's report, for the Connectivity header.
+final networkSyncReportProvider = NotifierProvider<NetworkSyncReportNotifier, NetworkSyncReport?>(NetworkSyncReportNotifier.new);
+
+class NetworkSyncReportNotifier extends Notifier<NetworkSyncReport?> {
+  @override
+  NetworkSyncReport? build() => null;
+
+  bool _running = false;
+  bool get isRunning => _running;
+
+  Future<void> sync() async {
+    if (_running) return;
+    _running = true;
+    ref.notifyListeners();
+    try {
+      state = await ref.read(networkSyncProvider).run();
+    } catch (e) {
+      ref.read(appLogProvider.notifier).add('GWN sync failed: $e');
+      rethrow;
+    } finally {
+      _running = false;
+    }
+  }
+}
+
+/// Every framework indicator, computed from the stored GWN rows.
+final networkInsightsProvider = FutureProvider<NetworkInsights>((ref) async {
+  ref.watch(dataVersionProvider(DataKind.all));
+  ref.watch(networkSyncReportProvider);
+  final db = ref.read(databaseProvider);
+  final networks = await db.networks.getNetworks();
+  final devices = await db.networks.getDevices();
+  final schools = await db.schools.getSchools();
+  final now = DateTime.now();
+  final fromDay = ymd(now.subtract(const Duration(days: 29)));
+  final toDay = ymd(now);
+  return NetworkInsightsBuilder().build(
+    networks: networks,
+    devices: devices,
+    days: await db.networks.getDaily(fromDay: fromDay, toDay: toDay),
+    ssidDays: await db.networks.getSsidDaily(fromDay: fromDay, toDay: toDay),
+    alarms: await db.networks.getAlarms(),
+    schoolsByCerd: {for (final s in schools) s.cerd: s},
+    publicSchools: schools.where((s) => s.inMaster).length,
+    lastSyncTs: ref.read(networkSyncReportProvider)?.finishedTs,
+  );
+});
+
+/// One school's network record.
+final schoolNetworkProvider = FutureProvider.autoDispose.family<SchoolNetwork?, String>((ref, networkId) async {
+  final all = await ref.watch(networkInsightsProvider.future);
+  return all.schools.where((s) => s.networkId == networkId).firstOrNull;
+});
 
 /// True when the app can talk to a data source (real credentials or demo).
 final canSyncProvider = Provider<bool>((ref) {

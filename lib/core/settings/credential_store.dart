@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/deye_api_client.dart';
 import '../models/credentials.dart';
+import '../models/gwn_credentials.dart';
 
 /// Reads/writes DeyeCloud credentials in the platform secure store
 /// (Android Keystore-backed EncryptedSharedPreferences, libsecret on Linux,
@@ -22,6 +23,12 @@ class CredentialStore implements TokenCache {
   static const _kTokenExpiry = 'deye.accessTokenExpiry';
   static const _kSeeded = 'deye.seededFromDefines';
 
+  // GWN Cloud (school network monitoring) — a separate account from DeyeCloud.
+  static const _kGwnAppId = 'gwn.appId';
+  static const _kGwnSecret = 'gwn.secretKey';
+  static const _kGwnBaseUrl = 'gwn.baseUrl';
+  static const _kGwnSeeded = 'gwn.seededFromDefines';
+
   /// Build-time seeds (`--dart-define=DEYE_APP_ID=...`). Empty when not set.
   static const seedAppId = String.fromEnvironment('DEYE_APP_ID');
   static const seedAppSecret = String.fromEnvironment('DEYE_APP_SECRET');
@@ -29,6 +36,12 @@ class CredentialStore implements TokenCache {
   static const seedPassword = String.fromEnvironment('DEYE_PASSWORD_SHA256');
   static const seedCompanyId = String.fromEnvironment('DEYE_COMPANY_ID');
   static const seedRegion = String.fromEnvironment('DEYE_REGION', defaultValue: 'eu');
+
+  static const seedGwnAppId = String.fromEnvironment('GWN_APP_ID');
+  static const seedGwnSecret = String.fromEnvironment('GWN_SECRET_KEY');
+  static const seedGwnBaseUrl = String.fromEnvironment('GWN_BASE_URL', defaultValue: GwnCredentials.defaultBaseUrl);
+
+  static bool get hasGwnSeed => seedGwnAppId.isNotEmpty && seedGwnSecret.isNotEmpty;
 
   static bool get hasSeed => seedAppId.isNotEmpty && seedAppSecret.isNotEmpty && seedEmail.isNotEmpty && seedPassword.isNotEmpty;
 
@@ -72,10 +85,45 @@ class CredentialStore implements TokenCache {
     await clear(); // token belongs to the previous credentials
   }
 
+  // --------------------------------------------------------------- GWN Cloud
+
+  /// Stored GWN credentials, those seeded at build time on first launch, or
+  /// null when the account has not been configured.
+  Future<GwnCredentials?> loadGwn() async {
+    final appId = await _read(_kGwnAppId);
+    if (appId == null || appId.isEmpty) {
+      if (hasGwnSeed && (await _read(_kGwnSeeded)) != '1') {
+        final seeded = GwnCredentials(appId: seedGwnAppId, secretKey: seedGwnSecret, baseUrl: seedGwnBaseUrl);
+        await saveGwn(seeded);
+        await _write(_kGwnSeeded, '1');
+        return seeded;
+      }
+      return null;
+    }
+    return GwnCredentials(
+      appId: appId,
+      secretKey: await _read(_kGwnSecret) ?? '',
+      baseUrl: await _read(_kGwnBaseUrl) ?? GwnCredentials.defaultBaseUrl,
+    );
+  }
+
+  Future<void> saveGwn(GwnCredentials c) async {
+    await _write(_kGwnAppId, c.appId.trim());
+    await _write(_kGwnSecret, c.secretKey.trim());
+    await _write(_kGwnBaseUrl, c.baseUrl.trim());
+  }
+
+  Future<void> deleteGwn() async {
+    for (final k in [_kGwnAppId, _kGwnSecret, _kGwnBaseUrl]) {
+      await _storage.delete(key: k);
+    }
+  }
+
   Future<void> deleteAll() async {
     for (final k in [_kAppId, _kAppSecret, _kEmail, _kPassword, _kCompanyId, _kRegion, _kToken, _kTokenExpiry]) {
       await _storage.delete(key: k);
     }
+    await deleteGwn();
   }
 
   // TokenCache -----------------------------------------------------------

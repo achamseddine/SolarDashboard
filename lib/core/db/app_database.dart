@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'alert_dao.dart';
 import 'device_dao.dart';
+import 'network_dao.dart';
 import 'retention.dart';
 import 'school_dao.dart';
 import 'station_dao.dart';
@@ -21,10 +22,12 @@ class AppDatabase {
         alerts = AlertDao(db),
         sync = SyncDao(db),
         schools = SchoolDao(db),
+        networks = NetworkDao(db),
         retention = Retention(db);
 
   /// v1: plant/device/energy/alarm tables. v2: school dataset + links.
-  static const int schemaVersion = 2;
+  /// v3: GWN Cloud networks, devices, daily counters and alarms.
+  static const int schemaVersion = 3;
 
   final Database db;
   final StationDao stations;
@@ -32,6 +35,7 @@ class AppDatabase {
   final AlertDao alerts;
   final SyncDao sync;
   final SchoolDao schools;
+  final NetworkDao networks;
   final Retention retention;
 
   final StreamController<Set<DataKind>> _changes = StreamController<Set<DataKind>>.broadcast();
@@ -310,6 +314,76 @@ class AppDatabase {
         updated_at INTEGER NOT NULL
       )''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_links_cerd ON station_school_links(cerd)');
+
+    // ------------------------------------------------ GWN Cloud (v3)
+    // One network per school LAN, its managed devices, the daily counters the
+    // indicator framework is computed from, and the cloud's alarms.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS gwn_networks (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        cerd INTEGER,
+        link_confidence REAL,
+        address TEXT,
+        timezone TEXT,
+        last_seen_ts INTEGER
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_gwn_networks_cerd ON gwn_networks(cerd)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS gwn_devices (
+        network_id TEXT NOT NULL,
+        mac TEXT NOT NULL,
+        name TEXT,
+        kind TEXT,
+        status TEXT,
+        model TEXT,
+        firmware TEXT,
+        ip TEXT,
+        uptime_s INTEGER,
+        client_count INTEGER,
+        cpu_percent REAL,
+        memory_percent REAL,
+        poe_total INTEGER, poe_active INTEGER, poe_failed INTEGER,
+        ports_up INTEGER, ports_down INTEGER, ports_error INTEGER,
+        last_seen_ts INTEGER,
+        PRIMARY KEY (network_id, mac)
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_gwn_devices_kind ON gwn_devices(kind, status)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS gwn_network_daily (
+        network_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        wan_up_minutes INTEGER, expected_minutes INTEGER,
+        rx_bytes INTEGER, tx_bytes INTEGER,
+        unique_clients INTEGER, peak_clients INTEGER,
+        aps_online INTEGER, aps_total INTEGER, active_aps INTEGER,
+        teaching_bytes INTEGER,
+        PRIMARY KEY (network_id, day)
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_gwn_daily_day ON gwn_network_daily(day)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS gwn_ssid_daily (
+        network_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        ssid TEXT NOT NULL,
+        bytes INTEGER, clients INTEGER,
+        PRIMARY KEY (network_id, day, ssid)
+      )''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS gwn_alarms (
+        id TEXT PRIMARY KEY,
+        network_id TEXT NOT NULL,
+        level TEXT,
+        message TEXT,
+        start_ts INTEGER NOT NULL,
+        device_mac TEXT,
+        end_ts INTEGER
+      )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_gwn_alarms_open ON gwn_alarms(end_ts, start_ts DESC)');
   }
 
   /// Tables filled by synchronisation (cleared by [clearAllData]).
@@ -317,6 +391,7 @@ class AppDatabase {
     'stations', 'station_latest', 'devices', 'device_latest', 'device_samples', 'station_snapshots',
     'station_daily', 'station_monthly', 'station_battery_daily', 'power_buckets', 'station_status_events',
     'alerts', 'sync_log', 'sync_meta',
+    'gwn_networks', 'gwn_devices', 'gwn_network_daily', 'gwn_ssid_daily', 'gwn_alarms',
   ];
 
   /// Tables filled from the bundled school dataset (kept by [clearAllData];
