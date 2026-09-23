@@ -12,10 +12,25 @@ import 'station_school_linker.dart';
 class NetworkSchoolLinker {
   NetworkSchoolLinker(List<School> schools)
       : _schools = schools,
+        _byCerd = {for (final s in schools) s.cerd: s},
         _linker = StationSchoolLinker(schools);
 
   final List<School> _schools;
+  final Map<int, School> _byCerd;
   final StationSchoolLinker _linker;
+
+  /// GWN names its networks `<CERD>- <school name>` in this deployment, so
+  /// the leading number is an exact key rather than something to guess at.
+  /// Tried first; the name comparison below is only the fallback.
+  /// CERDs start at 1, so a single digit counts. A number that is not a CERD
+  /// in the dataset is ignored and the name comparison takes over.
+  static final RegExp cerdPrefix = RegExp(r'^\s*(\d{1,6})\s*[-–—_:.]');
+
+  /// The CERD a network name carries, if it carries one.
+  static int? cerdFromName(String name) {
+    final m = cerdPrefix.firstMatch(name);
+    return m == null ? null : int.tryParse(m.group(1)!);
+  }
 
   /// Name-only matching has no second signal to confirm it, so the bar sits
   /// above the plant linker's [StationSchoolLinker.acceptName].
@@ -26,7 +41,17 @@ class NetworkSchoolLinker {
 
   /// Best school for [network], or null when nothing is convincing enough.
   ({School school, double confidence})? match(GwnNetwork network) {
-    final tokens = StationSchoolLinker.tokenize(network.name);
+    // An exact CERD beats any amount of name similarity.
+    final cerd = cerdFromName(network.name);
+    if (cerd != null) {
+      final s = _byCerd[cerd];
+      if (s != null) return (school: s, confidence: 1.0);
+    }
+
+    // Otherwise compare names, with any numeric prefix removed so it cannot
+    // drown out the words that actually identify the school.
+    final bare = network.name.replaceFirst(cerdPrefix, ' ');
+    final tokens = StationSchoolLinker.tokenize(bare);
     if (tokens.isEmpty) return null;
 
     final scored = <({School school, double score})>[];

@@ -15,6 +15,7 @@ class NetworkSyncReport {
     required this.failures,
     required this.finishedTs,
     this.message,
+    this.endpointNotes = const {},
   });
 
   final int networks;
@@ -28,6 +29,11 @@ class NetworkSyncReport {
   final int failures;
   final int finishedTs;
   final String? message;
+
+  /// What each part of the pull actually did, including the reason a call
+  /// returned nothing. Without this an endpoint the account does not expose
+  /// looks identical to a school with no activity.
+  final Map<String, String> endpointNotes;
 
   bool get isEmpty => networks == 0;
 }
@@ -56,6 +62,19 @@ class NetworkSync {
   final DateTime Function() _clock;
   final void Function(String message)? log;
 
+  /// One line naming whatever came back empty, so the dashboards' zeros can
+  /// be told apart from endpoints this account does not answer.
+  static String? _summarise(Map<String, String> notes, int networks, int devices, int daily, int ssid) {
+    final empty = <String>[
+      if (devices == 0) 'devices',
+      if (daily == 0) 'daily counters',
+      if (ssid == 0) 'per-SSID traffic',
+    ];
+    if (empty.isEmpty) return null;
+    final why = empty.map((k) => '$k (${notes[k] ?? 'not called'})').join('; ');
+    return '$networks networks synced, but nothing came back for: $why';
+  }
+
   /// Retention: daily rows older than this many days are dropped.
   static const int keepDays = 120;
 
@@ -82,31 +101,71 @@ class NetworkSync {
     final networks = await api.listNetworks();
     await db.networks.upsertNetworks(networks);
 
-    var devices = 0, dailyRows = 0, failures = 0;
-    for (final n in networks) {
+    var devices = 0, dailyRows = 0, ssidRows = 0, failures = 0;
+    final notes = <String, String>{};
+
+    // Each call is recorded separately: one endpoint the account does not
+    // expose must not look like every school being idle.
+    Future<int> part(String name, GwnNetwork n, Future<int> Function() run) async {
       try {
+        final count = await run();
+        if (count > 0) notes[name] = 'ok';
+        notes.putIfAbsent(name, () => 'answered, but returned no rows');
+        return count;
+      } catch (e) {
+        notes[name] = '$e';
+        log?.call('GWN: $name for network ${n.id} failed: $e');
+        return -1;
+      }
+    }
+
+    for (final n in networks) {
+      var failed = false;
+
+      final d = await part('devices', n, () async {
         final list = await api.listDevices(n.id);
         await db.networks.upsertDevices(list);
-        await db.networks.pruneDevices(n.id, {for (final d in list) d.mac});
-        devices += list.length;
-
-        final daily = await api.networkDaily(n.id, fromDay, toDay);
-        await db.networks.upsertDaily(daily);
-        dailyRows += daily.length;
-
-        final ssid = await api.ssidDaily(n.id, fromDay, toDay);
-        await db.networks.upsertSsidDaily(ssid);
-      } catch (e) {
-        failures++;
-        log?.call('GWN: network ${n.id} failed: $e');
+        await db.networks.pruneDevices(n.id, {for (final x in list) x.mac});
+        return list.length;
+      });
+      if (d < 0) {
+        failed = true;
+      } else {
+        devices += d;
       }
+
+      final day = await part('daily counters', n, () async {
+        final list = await api.networkDaily(n.id, fromDay, toDay);
+        await db.networks.upsertDaily(list);
+        return list.length;
+      });
+      if (day < 0) {
+        failed = true;
+      } else {
+        dailyRows += day;
+      }
+
+      final ssid = await part('per-SSID traffic', n, () async {
+        final list = await api.ssidDaily(n.id, fromDay, toDay);
+        await db.networks.upsertSsidDaily(list);
+        return list.length;
+      });
+      if (ssid < 0) {
+        failed = true;
+      } else {
+        ssidRows += ssid;
+      }
+
+      if (failed) failures++;
     }
 
     var alarms = <GwnAlarm>[];
     try {
       alarms = await api.listAlarms();
       await db.networks.upsertAlarms(alarms);
+      notes['alarms'] = alarms.isEmpty ? 'answered, but returned no rows' : 'ok';
     } catch (e) {
+      notes['alarms'] = '$e';
       log?.call('GWN: alarm list failed: $e');
     }
 
@@ -128,7 +187,8 @@ class NetworkSync {
       linked: linked,
       failures: failures,
       finishedTs: now.millisecondsSinceEpoch ~/ 1000,
-      message: failures == 0 ? null : '$failures of ${networks.length} networks did not return detail this run',
+      message: _summarise(notes, networks.length, devices, dailyRows, ssidRows),
+      endpointNotes: notes,
     );
   }
 }

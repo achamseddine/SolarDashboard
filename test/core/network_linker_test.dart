@@ -1,0 +1,56 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:unicef_solar_monitor/core/models/gwn.dart';
+import 'package:unicef_solar_monitor/core/schools/network_school_linker.dart';
+
+import '../helpers/test_env.dart';
+
+void main() {
+  test('a network named "<CERD>- <arabic name>" links to that school exactly', () {
+    final schools = TestEnv.dataset.schools;
+    final linker = NetworkSchoolLinker(schools);
+
+    // The names the GWN account actually carries, CERD prefix and all.
+    const names = {
+      1000: '1000- متوسطة الصويري الرسمية',
+      1001: '1001- متوسطة مشغرة الأولى الرسمية المختلطة',
+      1003: '1003- ثانوية مشغرة الرسمية',
+      1008: '1008- متوسطة القرعون الرسمية',
+      1019: '1019- الرفيد المتوسطة الرسمية',
+    };
+
+    for (final e in names.entries) {
+      final m = linker.match(GwnNetwork(id: 'n${e.key}', name: e.value));
+      expect(m, isNotNull, reason: 'no match for ${e.value}');
+      expect(m!.school.cerd, e.key, reason: 'wrong school for ${e.value}');
+      expect(m.confidence, 1.0);
+    }
+  });
+
+  test('the prefix is read only when it names a school in the dataset', () {
+    final linker = NetworkSchoolLinker(TestEnv.dataset.schools);
+
+    // A number that is not a CERD falls through to name matching rather than
+    // linking to something arbitrary.
+    final bogus = linker.match(const GwnNetwork(id: 'x', name: '999999- لا يوجد'));
+    expect(bogus, isNull);
+
+    expect(NetworkSchoolLinker.cerdFromName('1000- متوسطة الصويري الرسمية'), 1000);
+    expect(NetworkSchoolLinker.cerdFromName('متوسطة الصويري الرسمية'), isNull);
+    expect(NetworkSchoolLinker.cerdFromName('Beirut School'), isNull);
+    // CERDs start at 1, so a single digit is a real prefix.
+    expect(NetworkSchoolLinker.cerdFromName('7- سلمى الصايغ الرسمية المختلطة'), 7);
+  });
+
+  test('the whole account links when every network carries its CERD', () {
+    final schools = TestEnv.dataset.schools;
+    final linker = NetworkSchoolLinker(schools);
+    // Stand in for the 560-network account: name each after its own school.
+    final sample = schools.take(200).toList();
+    var linked = 0;
+    for (final s in sample) {
+      final m = linker.match(GwnNetwork(id: 'n${s.cerd}', name: '${s.cerd}- ${s.nameAr ?? s.name}'));
+      if (m != null && m.school.cerd == s.cerd) linked++;
+    }
+    expect(linked, sample.length, reason: 'every network with a CERD prefix should link');
+  });
+}
