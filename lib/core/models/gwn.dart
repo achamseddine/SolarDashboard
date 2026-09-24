@@ -166,7 +166,8 @@ class GwnDevice {
       firmware: asString(pick(j, ['firmware', 'version', 'firmwareVersion', 'swVersion'])),
       ip: asString(pick(j, ['ip', 'ipAddress', 'ipv4'])),
       uptimeSeconds: asInt(pick(j, ['uptime', 'upTime', 'runTime'])),
-      clientCount: asInt(pick(j, ['clientCount', 'clients', 'clientNum', 'staCount'])),
+      clientCount: asInt(pick(j, ['clientCount', 'clients', 'clientNum', 'staCount'])) ??
+          findInt(j, ['client', 'sta', 'user', 'terminal'], not: ['ssid', 'max', 'limit']),
       cpuPercent: asDouble(pick(j, ['cpu', 'cpuUsage', 'cpuPercent'])),
       memoryPercent: asDouble(pick(j, ['memory', 'memUsage', 'memoryPercent'])),
       poePortsTotal: asInt(pick(j, ['poePortTotal', 'poeTotal'])),

@@ -63,6 +63,36 @@ class NetworkSync {
   final DateTime Function() _clock;
   final void Function(String message)? log;
 
+  /// Fills a network's client and access-point counts from its own devices
+  /// when the network payload did not carry them.
+  ///
+  /// The access points are fetched anyway and each reports its own clients,
+  /// so their sum is the network's — a better source than a field name
+  /// guessed at on an API with no published schema.
+  static GwnNetworkDay _withDeviceCounts(GwnNetworkDay day, List<GwnDevice> devices) {
+    if (devices.isEmpty) return day;
+    final aps = devices.where((d) => d.kind == GwnDeviceKind.accessPoint).toList();
+    final counted = aps.map((d) => d.clientCount).whereType<int>().toList();
+    final clients = counted.isEmpty ? null : counted.fold<int>(0, (a, b) => a + b);
+
+    return GwnNetworkDay(
+      networkId: day.networkId,
+      day: day.day,
+      wanUpMinutes: day.wanUpMinutes,
+      expectedMinutes: day.expectedMinutes,
+      rxBytes: day.rxBytes,
+      txBytes: day.txBytes,
+      uniqueClients: day.uniqueClients ?? clients,
+      peakClients: day.peakClients ?? clients,
+      apsOnline: day.apsOnline ?? (aps.isEmpty ? null : aps.where((d) => d.isOnline).length),
+      apsTotal: day.apsTotal ?? (aps.isEmpty ? null : aps.length),
+      activeAps: day.activeAps ?? (counted.isEmpty ? null : aps.where((d) => (d.clientCount ?? 0) > 0).length),
+      teachingHoursBytes: day.teachingHoursBytes,
+      observations: day.observations,
+      onlineObservations: day.onlineObservations,
+    );
+  }
+
   /// One line naming whatever came back empty, so the dashboards' zeros can
   /// be told apart from endpoints this account does not answer.
   static String? _summarise(Map<String, String> notes, int networks, int devices, int daily, int ssid) {
@@ -153,7 +183,7 @@ class NetworkSync {
           final up = devices.isEmpty
               ? (list.single.apsOnline ?? 0) > 0
               : devices.any((x) => x.isOnline);
-          await db.networks.recordObservation(list.single, online: up);
+          await db.networks.recordObservation(_withDeviceCounts(list.single, devices), online: up);
         } else {
           await db.networks.upsertDaily(list);
         }

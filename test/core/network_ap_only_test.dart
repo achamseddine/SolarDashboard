@@ -85,4 +85,29 @@ void main() {
     final s = _build(_aps(total: 4, online: 4), days).schools.single;
     expect(s.scoreOf('Regularity of usage'), 100, reason: 'both measured days were active');
   });
+
+  test('the usage page falls back to access points when clients are absent', () {
+    // Two days of observations with AP counts but no client figure — what
+    // this account actually returns.
+    final days = [
+      for (var i = 1; i <= 2; i++)
+        GwnNetworkDay(
+          networkId: 'n1',
+          day: '2026-09-2$i',
+          observations: 5,
+          onlineObservations: 5,
+          apsOnline: 3,
+          apsTotal: 4,
+        ),
+    ];
+    final d = _build(_aps(total: 4, online: 3), days);
+
+    expect(d.dailyClients.every((x) => x.clients == 0), isTrue, reason: 'no client counts came back');
+    expect(d.dailyApsOnline.length, 2, reason: 'the access points are still a real series');
+    expect(d.dailyApsOnline.every((x) => x.aps == 3), isTrue);
+
+    // …and it is still not treated as evidence about use.
+    expect(d.schools.single.hasUsageEvidence, isFalse);
+    expect(d.lowAdoption, 0);
+  });
 }

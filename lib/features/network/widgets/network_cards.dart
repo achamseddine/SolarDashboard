@@ -335,7 +335,11 @@ class NetworkTrendCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = insights;
-    if (d.dailyClients.isEmpty) {
+    // Client counts are the point of this card, but where the account does
+    // not report them the access points do exist, and showing those beats
+    // an empty panel.
+    final hasClients = d.dailyClients.any((x) => x.clients > 0);
+    if (d.dailyClients.isEmpty && d.dailyApsOnline.isEmpty) {
       return const SectionCard(
         title: 'Use over time',
         child: EmptyState(
@@ -346,44 +350,52 @@ class NetworkTrendCard extends StatelessWidget {
       );
     }
     final p = ChartPalette.of(context);
+    final rows = hasClients ? d.dailyClients : d.dailyApsOnline.map((x) => (day: x.day, clients: x.aps)).toList();
     final groups = [
-      for (var i = 0; i < d.dailyClients.length; i++)
+      for (var i = 0; i < rows.length; i++)
         BarGroup(
-          label: Fmt.shortDay(d.dailyClients[i].day),
-          fullLabel: '${Fmt.shortDay(d.dailyClients[i].day)} · ${Fmt.int_(d.dailyClients[i].clients)} devices · ${Fmt.bytes(d.dailyBytes[i].bytes)}',
-          values: [d.dailyClients[i].clients.toDouble()],
+          label: Fmt.shortDay(rows[i].day),
+          fullLabel: hasClients
+              ? '${Fmt.shortDay(rows[i].day)} · ${Fmt.int_(rows[i].clients)} devices · ${Fmt.bytes(d.dailyBytes[i].bytes)}'
+              : '${Fmt.shortDay(rows[i].day)} · ${Fmt.int_(rows[i].clients)} access points up',
+          values: [rows[i].clients.toDouble()],
         ),
     ];
     return ChartOrTable(
-      title: 'Client devices per day',
-      subtitle: 'Unique devices seen across every school, last ${d.days} days',
+      title: hasClients ? 'Client devices per day' : 'Access points online per day',
+      subtitle: hasClients
+          ? 'Unique devices seen across every school, last ${d.days} days'
+          : 'This account reports no client counts, so the access points stand in — last ${d.days} days',
       chart: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           EnergyBarChart(
-            seriesLabels: const ['Devices'],
+            seriesLabels: [hasClients ? 'Devices' : 'Access points'],
             seriesColors: [p.load],
             groups: groups,
             height: 220,
             maxLabels: 10,
             unitFormatter: (v) => Fmt.int_(v),
-            emptyMessage: 'No client counts recorded yet',
+            emptyMessage: 'Nothing recorded yet',
           ),
-          const MutedNote(
-            'Unique device identifiers are a proxy for devices, not for students: modern phones randomise their MAC '
-            'address unless they authenticate, so a device count can move without the number of users changing.',
+          MutedNote(
+            hasClients
+                ? 'Unique device identifiers are a proxy for devices, not for students: modern phones randomise their '
+                    'MAC address unless they authenticate, so a device count can move without the number of users changing.'
+                : 'Access points online is an infrastructure figure, not a measure of use. It is shown because this '
+                    'account reports no client counts; the adoption indicators stay unscored until it does.',
           ),
         ],
       ),
       table: ChartTable(
-        columns: const ['Day', 'Devices', 'Traffic', 'Mean uptime'],
+        columns: ['Day', hasClients ? 'Devices' : 'APs up', 'Traffic', 'Mean uptime'],
         rows: [
-          for (var i = d.dailyClients.length - 1; i >= 0; i--)
+          for (var i = rows.length - 1; i >= 0; i--)
             [
-              Fmt.shortDay(d.dailyClients[i].day),
-              Fmt.int_(d.dailyClients[i].clients),
-              Fmt.bytes(d.dailyBytes[i].bytes),
-              Fmt.ratio(d.dailyUptime.where((u) => u.day == d.dailyClients[i].day).firstOrNull?.uptime, decimals: 1),
+              Fmt.shortDay(rows[i].day),
+              Fmt.int_(rows[i].clients),
+              Fmt.bytes(d.dailyBytes.where((b) => b.day == rows[i].day).firstOrNull?.bytes),
+              Fmt.ratio(d.dailyUptime.where((u) => u.day == rows[i].day).firstOrNull?.uptime, decimals: 1),
             ],
         ],
       ),

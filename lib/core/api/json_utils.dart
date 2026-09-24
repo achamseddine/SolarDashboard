@@ -97,6 +97,36 @@ int? _normaliseEpoch(num n) {
 
 /// Returns the first value found under any of [keys] (case-sensitive first,
 /// then case-insensitive).
+/// Flattens one level of nesting, so `{stat: {clientNum: 3}}` also offers
+/// `stat.clientNum`. Undocumented payloads nest their counters as often as
+/// not, and a name match has to see them.
+Map<String, Object?> flattenOnce(Map<String, Object?> json) {
+  final out = <String, Object?>{...json};
+  for (final e in json.entries) {
+    final v = e.value;
+    if (v is Map) {
+      v.forEach((k, inner) => out['${e.key}.$k'] = inner);
+    }
+  }
+  return out;
+}
+
+/// The first integer whose key mentions any of [words] and none of [not].
+///
+/// For an API with no published field list, matching on what a key *means*
+/// survives a rename that an exact-name lookup would not. [pick] stays the
+/// first choice; this is the fallback when it finds nothing.
+int? findInt(Map<String, Object?> json, List<String> words, {List<String> not = const []}) {
+  for (final e in flattenOnce(json).entries) {
+    final k = e.key.toLowerCase();
+    if (not.any(k.contains)) continue;
+    if (!words.any(k.contains)) continue;
+    final v = asInt(e.value);
+    if (v != null) return v;
+  }
+  return null;
+}
+
 Object? pick(Map<String, Object?> json, List<String> keys) {
   for (final k in keys) {
     if (json.containsKey(k) && json[k] != null) return json[k];

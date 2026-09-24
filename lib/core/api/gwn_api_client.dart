@@ -425,12 +425,21 @@ class GwnApiClient implements GwnApi {
     if (detail.isEmpty) return const [];
     _noteFields('networkDetail', [detail]);
 
-    final clients = asInt(pick(detail, ['clientCount', 'clientNum', 'clients', 'staCount', 'onlineClient', 'userCount']));
-    final apsOnline = asInt(pick(detail, ['onlineAp', 'apOnline', 'apsOnline', 'onlineDevice', 'onlineNum']));
-    final apsTotal = asInt(pick(detail, ['apTotal', 'totalAp', 'apsTotal', 'deviceCount', 'totalNum']));
-    final rx = asInt(pick(detail, ['rxBytes', 'downloadBytes', 'download', 'rx', 'downTraffic']));
-    final tx = asInt(pick(detail, ['txBytes', 'uploadBytes', 'upload', 'tx', 'upTraffic']));
-    final usage = asInt(pick(detail, ['usage', 'traffic', 'totalTraffic', 'flow']));
+    // Named keys first; then a match on what the key means, because this
+    // payload has no published field list and a guessed name is why these
+    // counters read zero.
+    final clients = asInt(pick(detail, ['clientCount', 'clientNum', 'clients', 'staCount', 'onlineClient', 'userCount'])) ??
+        findInt(detail, ['client', 'sta', 'user', 'terminal'], not: ['ssid', 'max', 'limit', 'total_ap']);
+    final apsOnline = asInt(pick(detail, ['onlineAp', 'apOnline', 'apsOnline', 'onlineDevice', 'onlineNum'])) ??
+        findInt(detail, ['online'], not: ['client', 'user', 'offline']);
+    final apsTotal = asInt(pick(detail, ['apTotal', 'totalAp', 'apsTotal', 'deviceCount', 'totalNum'])) ??
+        findInt(detail, ['aptotal', 'totalap', 'devicecount', 'devicenum'], not: ['online', 'offline']);
+    final rx = asInt(pick(detail, ['rxBytes', 'downloadBytes', 'download', 'rx', 'downTraffic'])) ??
+        findInt(detail, ['download', 'rxbyte', 'downtraffic']);
+    final tx = asInt(pick(detail, ['txBytes', 'uploadBytes', 'upload', 'tx', 'upTraffic'])) ??
+        findInt(detail, ['upload', 'txbyte', 'uptraffic']);
+    final usage = asInt(pick(detail, ['usage', 'traffic', 'totalTraffic', 'flow'])) ??
+        findInt(detail, ['traffic', 'usage', 'flow', 'byte'], not: ['download', 'upload', 'rx', 'tx']);
 
     return [
       GwnNetworkDay(

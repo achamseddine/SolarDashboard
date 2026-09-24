@@ -252,6 +252,7 @@ class NetworkInsights {
     required this.byRegion,
     required this.dailyClients,
     required this.dailyBytes,
+    this.dailyApsOnline = const [],
     required this.dailyUptime,
     required this.ssidTraffic,
     required this.thresholds,
@@ -295,6 +296,10 @@ class NetworkInsights {
   /// Portfolio series over the window, oldest first.
   final List<({String day, int clients})> dailyClients;
   final List<({String day, int bytes})> dailyBytes;
+
+  /// Access points seen up each day. Available even where the account
+  /// reports no client counts, so the usage page has something real to show.
+  final List<({String day, int aps})> dailyApsOnline;
   final List<({String day, double uptime})> dailyUptime;
 
   /// Traffic per SSID over the window, largest first.

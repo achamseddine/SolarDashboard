@@ -123,14 +123,16 @@ class NetworkInsightsBuilder {
     final clientsByDay = <String, int>{};
     final bytesByDay = <String, int>{};
     final upByDay = <String, List<double>>{};
+    final apsByDay = <String, int>{};
     for (final d in days) {
+      if (d.apsOnline != null) apsByDay[d.day] = (apsByDay[d.day] ?? 0) + d.apsOnline!;
       if (d.uniqueClients != null) clientsByDay[d.day] = (clientsByDay[d.day] ?? 0) + d.uniqueClients!;
       final b = d.totalBytes;
       if (b != null) bytesByDay[d.day] = (bytesByDay[d.day] ?? 0) + b;
       final u = d.uptimeShare;
       if (u != null) upByDay.putIfAbsent(d.day, () => []).add(u);
     }
-    final dayKeys = {...clientsByDay.keys, ...bytesByDay.keys, ...upByDay.keys}.toList()..sort();
+    final dayKeys = {...clientsByDay.keys, ...bytesByDay.keys, ...upByDay.keys, ...apsByDay.keys}.toList()..sort();
 
     // ---------------------------------------------------------------- SSID
     final ssidBytes = <String, int>{};
@@ -186,6 +188,7 @@ class NetworkInsightsBuilder {
       byRegion: byRegion,
       dailyClients: [for (final d in dayKeys) (day: d, clients: clientsByDay[d] ?? 0)],
       dailyBytes: [for (final d in dayKeys) (day: d, bytes: bytesByDay[d] ?? 0)],
+      dailyApsOnline: [for (final d in dayKeys) (day: d, aps: apsByDay[d] ?? 0)],
       dailyUptime: [
         for (final d in dayKeys)
           if (upByDay[d] != null && upByDay[d]!.isNotEmpty)
