@@ -24,18 +24,22 @@ enum NetworkSchoolFilter {
   meaningfullyConnected(
     'Meaningfully connected',
     'Uptime at or above the agreed target across a day of checks, with the access points available too. Speed, latency and packet loss are not measured, so this is reliability only.',
+    whenEmpty: 'No school has a measured uptime yet, so none can be judged against the target. Being seen online is not the same as a share; that needs several checks in a day.',
   ),
   activelyUsing(
     'Actively using technology',
     'Carried both the agreed client count and the agreed traffic on at least the agreed share of the days that were measured.',
+    whenEmpty: 'No day has carried both a client count and a traffic figure yet, so no school can be shown as using the network — which is not the same as none of them using it.',
   ),
   highAdoption(
     'High digital adoption',
     'Sustained use: Wi-Fi utilisation and regularity together at or above the high-adoption mark. Only schools where use was actually measured can appear.',
+    whenEmpty: 'Use has not been measured anywhere yet, so no school can be credited with sustained use.',
   ),
   lowAdoption(
     'Low / no adoption',
     'Use was measured and came back weak. Schools nobody has measured yet are deliberately absent — an unmeasured school is not a school that failed.',
+    whenEmpty: 'Use has not been measured anywhere yet. A school nobody has measured is deliberately not counted as low adoption.',
   ),
   technicalIntervention(
     'Technical intervention',
@@ -44,14 +48,17 @@ enum NetworkSchoolFilter {
   adoptionSupport(
     'Adoption support',
     'The infrastructure is healthy and the network still goes largely unused — a training and leadership question rather than a maintenance one.',
+    whenEmpty: 'Placing a school here needs both an infrastructure score and a use score; nothing has been measured on the use axis yet.',
   ),
   uptimeMeasured(
     'Average network uptime',
     'Schools checked often enough in a day for a share to mean anything. The headline is the mean of their uptimes; a school checked once carries no share and is not counted.',
+    whenEmpty: 'No school has been checked often enough in one day yet. The cloud exposes no history, so the app builds uptime from its own repeated observations — this fills in as the tablet keeps syncing.',
   ),
   clientsMeasured(
     'Active client devices',
     'Schools where the cloud reported a client count. The headline adds their daily means — devices, not people: a phone that randomises its address counts more than once.',
+    whenEmpty: 'This account reports no client counts, on the network or on its access points, so there is nothing to average. The access points online are shown on the Usage tab instead.',
   ),
   openIncidents(
     'Open critical incidents',
@@ -86,13 +93,18 @@ enum NetworkSchoolFilter {
     'Devices not on the release most of the account runs, which stands in for an approved baseline until one is configured.',
   );
 
-  const NetworkSchoolFilter(this.label, this.what);
+  const NetworkSchoolFilter(this.label, this.what, {this.whenEmpty});
 
   /// Headline label this slice belongs to.
   final String label;
 
   /// What the number actually says, in the operator's terms.
   final String what;
+
+  /// Why the list can be empty — the difference between "no school is in
+  /// this state" and "nothing has been measured yet", which matters more
+  /// than the empty list itself.
+  final String? whenEmpty;
 
   /// Whether one school belongs in this slice.
   bool matches(SchoolNetwork s, NetworkThresholds t) => switch (this) {

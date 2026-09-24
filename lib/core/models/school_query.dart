@@ -213,8 +213,13 @@ class SchoolQuery {
       other.hasAudit == hasAudit &&
       other.secondShift == secondShift &&
       other.sort == sort &&
-      other.ascending == ascending;
+      other.ascending == ascending &&
+      other.inMasterOnly == inMasterOnly;
 
+  // Every field belongs here: schoolDirectoryProvider is a family keyed by
+  // this object, so a field left out of equality serves one filter's list
+  // to another.
   @override
-  int get hashCode => Object.hash(search, region, caza, ownership, connected, solarized, solarStatus, monitored, hasAudit, secondShift, sort, ascending);
+  int get hashCode =>
+      Object.hash(search, region, caza, ownership, connected, solarized, solarStatus, monitored, hasAudit, secondShift, sort, ascending, inMasterOnly);
 }

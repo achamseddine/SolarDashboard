@@ -39,7 +39,10 @@ class DataPathCard extends StatelessWidget {
       // The header count exceeds the rows shown as soon as there are more
       // than ten; the whole list is one tap away rather than truncated in
       // silence.
-      trailing: rows.isEmpty ? null : SeeAllButton(location: schoolsRoute(monitored: true, connected: false)),
+      // These rows are monitored plants, which exist whether or not the
+      // school is in the MEHE master list, so the link must not restrict to
+      // it the way the roll-out figures do.
+      trailing: rows.isEmpty ? null : SeeAllButton(location: schoolsRoute(monitored: true, connected: false, master: false)),
       subtitle: 'Monitored plants at schools that are not on the internet roll-out',
       emptyText: loading
           ? 'Loading monitored plants…'

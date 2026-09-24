@@ -80,6 +80,23 @@ void main() {
     expect(find.widgetWithText(InputChip, 'Schools connected'), findsOneWidget);
   });
 
+  testWidgets('a tappable table row is a row, not a selection', (tester) async {
+    final env = await TestEnv.createFor(tester, schools: 10, networks: 30);
+    addTearDown(env.dispose);
+    await tester.pumpWidget(env.wrap(const ConnectivityScreen()));
+    await TestEnv.settle(tester, rounds: 8);
+    await tester.tap(find.widgetWithText(Tab, 'Schools'));
+    await TestEnv.settle(tester, rounds: 6);
+
+    // Giving a DataRow an onSelectChanged makes Flutter add a checkbox column
+    // and a select-all box in the header — which would open one sheet per
+    // school at a single tap.
+    expect(find.byType(DataTable), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(tester.widget<DataTable>(find.byType(DataTable)).showCheckboxColumn, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('infrastructure figures open the schools behind them', (tester) async {
     final env = await TestEnv.createFor(tester, schools: 10, networks: 30);
     addTearDown(env.dispose);

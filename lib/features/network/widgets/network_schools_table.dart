@@ -11,7 +11,7 @@ import 'network_detail_sheet.dart';
 /// Every school with a monitored network, with the indicators a manager acts
 /// on and a filter for each quadrant of the matrix.
 class NetworkSchoolsTable extends StatefulWidget {
-  const NetworkSchoolsTable({super.key, required this.insights, this.initialQuadrant, this.initialFilter});
+  const NetworkSchoolsTable({super.key, required this.insights, this.initialQuadrant, this.initialFilter, this.revision = 0});
 
   final NetworkInsights insights;
   final AdoptionQuadrant? initialQuadrant;
@@ -19,6 +19,11 @@ class NetworkSchoolsTable extends StatefulWidget {
   /// A headline slice sent here from a tapped tile, shown as a chip that can
   /// be cleared.
   final NetworkSchoolFilter? initialFilter;
+
+  /// Rises on every jump from a tile. Without it, clearing the chip and
+  /// tapping the same tile again would arrive with an unchanged filter and
+  /// leave the table showing everything.
+  final int revision;
 
   @override
   State<NetworkSchoolsTable> createState() => _NetworkSchoolsTableState();
@@ -34,8 +39,12 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
   @override
   void didUpdateWidget(covariant NetworkSchoolsTable old) {
     super.didUpdateWidget(old);
-    if (old.initialQuadrant != widget.initialQuadrant) _quadrant = widget.initialQuadrant;
-    if (old.initialFilter != widget.initialFilter) _filter = widget.initialFilter;
+    if (old.revision != widget.revision ||
+        old.initialQuadrant != widget.initialQuadrant ||
+        old.initialFilter != widget.initialFilter) {
+      _quadrant = widget.initialQuadrant;
+      _filter = widget.initialFilter;
+    }
   }
 
   List<SchoolNetwork> get _rows {
@@ -130,6 +139,9 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
+                    // A tappable row otherwise grows a checkbox column and a
+                    // select-all box that would open every school at once.
+                    showCheckboxColumn: false,
                     sortColumnIndex: _sort,
                     sortAscending: _asc,
                     columns: [

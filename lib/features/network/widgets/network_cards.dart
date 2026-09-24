@@ -24,6 +24,9 @@ class NetworkHeadlineKpis extends StatelessWidget {
   final NetworkInsights insights;
   final OpenSchoolList? onOpenList;
 
+  /// Open critical alarms that belong to a network in the account.
+  static int _attributable(NetworkInsights d) => d.schools.fold<int>(0, (a, s) => a + s.openCriticalAlarms);
+
   /// One headline tile and the panel it opens.
   Widget _tile(
     BuildContext context, {
@@ -70,6 +73,10 @@ class NetworkHeadlineKpis extends StatelessWidget {
             DrillFact('Share of public schools', Fmt.ratio(d.connectedShare)),
             DrillFact('Public schools in the master list', Fmt.int_(d.publicSchools)),
           ],
+          note: d.unlinkedNetworks == 0
+              ? null
+              : 'The count includes ${Fmt.int_(d.unlinkedNetworks)} networks whose name carries no CERD the app could match, '
+                  'while the denominator counts public schools only — so the share reads high until they are matched.',
         ),
         _tile(
           context,
@@ -181,8 +188,13 @@ class NetworkHeadlineKpis extends StatelessWidget {
           color: d.openCriticalIncidents > 0 ? AppColors.critical : AppColors.muted,
           facts: [
             DrillFact('Open critical alarms', Fmt.int_(d.openCriticalIncidents)),
+            // An alarm the account raised against no network in the list
+            // cannot be placed at a school, and would otherwise be a figure
+            // with nothing behind it.
+            if (d.openCriticalIncidents > _attributable(d))
+              DrillFact('Not attributable to a network', Fmt.int_(d.openCriticalIncidents - _attributable(d))),
             DrillFact('Schools carrying them', Fmt.int_(NetworkSchoolFilter.openIncidents.count(d)),
-                opens: () => drillFor(d, NetworkSchoolFilter.openIncidents)),
+                opens: NetworkSchoolFilter.openIncidents.count(d) == 0 ? null : () => drillFor(d, NetworkSchoolFilter.openIncidents)),
           ],
           note: 'The headline counts alarms; the list counts schools, so a school with three alarms appears once.',
         ),
@@ -427,6 +439,10 @@ class InfrastructureCard extends StatelessWidget {
   final NetworkInsights insights;
   final OpenSchoolList? onOpenList;
 
+  /// The figure counts [things] across the account; the list counts schools.
+  static String _countsThings(String things) =>
+      'The figure counts $things across the account; the list counts the schools carrying them, worst first.';
+
   /// The device kind whose offline units a row should list.
   static const _kindFilter = {
     GwnDeviceKind.router: NetworkSchoolFilter.gatewayOffline,
@@ -494,14 +510,20 @@ class InfrastructureCard extends StatelessWidget {
             Fmt.int_(poeFailed),
             onTap: poeFailed == 0
                 ? null
-                : () => _drill(context, NetworkSchoolFilter.poeFailed, title: 'PoE ports failed', value: Fmt.int_(poeFailed)),
+                : () => _drill(context, NetworkSchoolFilter.poeFailed,
+                    title: 'PoE ports failed',
+                    value: Fmt.int_(poeFailed),
+                    note: _countsThings('ports')),
           ),
           InfoRow(
             'LAN ports with errors',
             Fmt.int_(portErrors),
             onTap: portErrors == 0
                 ? null
-                : () => _drill(context, NetworkSchoolFilter.portErrors, title: 'LAN ports with errors', value: Fmt.int_(portErrors)),
+                : () => _drill(context, NetworkSchoolFilter.portErrors,
+                    title: 'LAN ports with errors',
+                    value: Fmt.int_(portErrors),
+                    note: _countsThings('ports')),
           ),
           InfoRow(
             'Firmware compliance',
@@ -513,6 +535,7 @@ class InfrastructureCard extends StatelessWidget {
                       NetworkSchoolFilter.firmwareOutdated,
                       title: 'Devices off the firmware baseline',
                       value: Fmt.int_(fwTotal - fwOk),
+                      note: _countsThings('devices'),
                       facts: [
                         DrillFact('Devices on the baseline', '$fwOk of $fwTotal'),
                         DrillFact('Compliance', Fmt.ratio(fwOk / fwTotal)),

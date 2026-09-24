@@ -35,6 +35,7 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
   late final TabController _tabs = TabController(length: 5, vsync: this);
   AdoptionQuadrant? _quadrant;
   NetworkSchoolFilter? _filter;
+  int _jump = 0;
 
   @override
   void initState() {
@@ -64,6 +65,7 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
     setState(() {
       _quadrant = quadrant;
       _filter = null;
+      _jump++;
     });
     _tabs.animateTo(4);
   }
@@ -74,6 +76,7 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
     setState(() {
       _filter = filter;
       _quadrant = null;
+      _jump++;
     });
     _tabs.animateTo(4);
   }
@@ -104,7 +107,7 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
               NetworkOverviewTab(onShowSchools: _showSchools, onOpenList: _showFiltered),
               NetworkInfrastructureTab(onOpenList: _showFiltered),
               const NetworkUsageTab(),
-              NetworkSchoolsTab(quadrant: _quadrant, filter: _filter),
+              NetworkSchoolsTab(quadrant: _quadrant, filter: _filter, revision: _jump),
             ],
           ),
         ),

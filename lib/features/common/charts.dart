@@ -303,7 +303,9 @@ class EnergyBarChart extends StatelessWidget {
                   touchCallback: onBarTap == null
                       ? null
                       : (event, response) {
-                          if (!event.isInterestedForInteractions) return;
+                          // A deliberate tap only: the callback also fires on
+                          // hover and on touch-down.
+                          if (event is! FlTapUpEvent) return;
                           final i = response?.spot?.touchedBarGroupIndex;
                           if (i != null && i >= 0 && i < groups.length) onBarTap!(i);
                         },
@@ -693,6 +695,8 @@ class ChartTable extends StatelessWidget {
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
+            // Row taps must not turn the table into a selection list.
+            showCheckboxColumn: false,
             headingRowHeight: 36,
             dataRowMinHeight: 32,
             dataRowMaxHeight: 36,

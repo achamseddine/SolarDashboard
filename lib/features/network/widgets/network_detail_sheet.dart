@@ -67,6 +67,10 @@ class NetworkDrill {
   final String? emptyMessage;
 }
 
+/// Every detail sheet carries this name, so leaving for the Schools tab can
+/// close the whole stack rather than one panel of it.
+const String _sheetRoute = 'network-detail';
+
 /// Opens [drill] as a sheet. [onOpenList] carries the slice to the Schools
 /// tab, where it can be sorted and searched in full.
 Future<void> showNetworkDrill(
@@ -80,6 +84,7 @@ Future<void> showNetworkDrill(
       showDragHandle: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 900),
+      routeSettings: const RouteSettings(name: _sheetRoute),
       builder: (_) => _DrillSheet(drill: drill, onOpenList: onOpenList),
     );
 
@@ -194,7 +199,9 @@ class _DrillSheetState extends State<_DrillSheet> {
           Expanded(
             child: rows.isEmpty
                 ? EmptyState(
-                    message: d.rows.isEmpty ? (d.emptyMessage ?? 'No school falls under this figure.') : 'No school matches.',
+                    message: d.rows.isEmpty
+                        ? (d.emptyMessage ?? d.filter?.whenEmpty ?? 'No school falls under this figure.')
+                        : 'No school matches.',
                     icon: d.rows.isEmpty ? Icons.info_outline : Icons.search_off,
                   )
                 : ListView.builder(
@@ -218,7 +225,8 @@ class _DrillSheetState extends State<_DrillSheet> {
                     },
                   ),
           ),
-          if (d.filter != null && widget.onOpenList != null)
+          // Nothing to open when the slice listed nothing.
+          if (d.filter != null && widget.onOpenList != null && d.rows.isNotEmpty)
             SafeArea(
               top: false,
               child: Padding(
@@ -228,7 +236,10 @@ class _DrillSheetState extends State<_DrillSheet> {
                   children: [
                     FilledButton.icon(
                       onPressed: () {
-                        Navigator.of(context).pop();
+                        // A drill opened from inside another drill leaves two
+                        // panels on the stack; both have to go or the table
+                        // opens underneath them.
+                        Navigator.of(context).popUntil((r) => r.settings.name != _sheetRoute);
                         widget.onOpenList!(d.filter!);
                       },
                       icon: const Icon(Icons.table_rows_outlined, size: 18),
@@ -251,6 +262,7 @@ Future<void> showSchoolNetworkDetail(BuildContext context, SchoolNetwork school)
       showDragHandle: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 900),
+      routeSettings: const RouteSettings(name: _sheetRoute),
       builder: (_) => _SchoolSheet(school: school),
     );
 
