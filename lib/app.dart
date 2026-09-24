@@ -58,6 +58,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 initialSolar: s.uri.queryParameters['solar'],
                 initialMonitored: s.uri.queryParameters['monitored'],
                 initialFilter: s.uri.queryParameters['filter'],
+                initialMaster: s.uri.queryParameters['master'],
               ),
             ),
             routes: [

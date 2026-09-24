@@ -27,6 +27,7 @@ class DistrictCards extends StatelessWidget {
         trailing: (g) => Fmt.int_(g.notConnected),
         trailingHint: 'without internet',
         note: 'Tap a district to list its schools without internet.',
+        route: (g) => schoolsRoute(caza: g.name, connected: false),
       ),
       right: _DistrictCard(
         title: 'Best served districts',
@@ -36,7 +37,11 @@ class DistrictCards extends StatelessWidget {
         color: AppColors.good,
         trailing: (g) => Fmt.ratio(g.share),
         trailingHint: 'connected',
-        note: 'A finished district is where a next solar phase has a data path from day one.',
+        // This ranking is about the share connected, so the row opens the
+        // connected schools; sending it to the without-internet list shows
+        // the opposite of the figure it was tapped on.
+        note: 'Tap a district to list its connected schools. A finished district is where a next solar phase has a data path from day one.',
+        route: (g) => schoolsRoute(caza: g.name, connected: true),
       ),
     );
   }
@@ -52,6 +57,7 @@ class _DistrictCard extends StatelessWidget {
     required this.trailing,
     required this.trailingHint,
     required this.note,
+    required this.route,
   });
 
   final String title;
@@ -62,6 +68,9 @@ class _DistrictCard extends StatelessWidget {
   final String Function(ConnectivityGroup) trailing;
   final String trailingHint;
   final String note;
+
+  /// Where one district's row leads — the list the ranking is about.
+  final String Function(ConnectivityGroup) route;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +98,7 @@ class _DistrictCard extends StatelessWidget {
                 subtitle: '${Fmt.int_(g.connected)} of ${Fmt.int_(g.schools)} connected · ${Fmt.int_(g.studentsWithout)} students without',
                 trailing: trailing(g),
                 trailingHint: trailingHint,
-                onTap: () => goTo(context, schoolsRoute(caza: g.name, connected: false)),
+                onTap: () => goTo(context, route(g)),
               ),
           MutedNote(note),
         ],

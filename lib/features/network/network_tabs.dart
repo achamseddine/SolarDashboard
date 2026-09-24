@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/network_filter.dart';
 import '../../core/models/network_insights.dart';
 import '../../core/providers.dart';
 import '../../core/utils/format.dart';
 import '../common/widgets.dart';
 import '../dashboard/widgets/dashboard_common.dart';
 import 'widgets/network_cards.dart';
+import 'widgets/network_detail_sheet.dart';
 import 'widgets/network_schools_table.dart';
 
 /// The school-network dashboards, built from the GWN Cloud account against
@@ -16,9 +18,12 @@ import 'widgets/network_schools_table.dart';
 /// executive headline with the matrix, infrastructure health, and how the
 /// networks are actually used.
 class NetworkOverviewTab extends ConsumerWidget {
-  const NetworkOverviewTab({super.key, this.onShowSchools});
+  const NetworkOverviewTab({super.key, this.onShowSchools, this.onOpenList});
 
   final void Function(AdoptionQuadrant quadrant)? onShowSchools;
+
+  /// Carries a headline slice to the Schools tab.
+  final OpenSchoolList? onOpenList;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _Body(
@@ -26,7 +31,7 @@ class NetworkOverviewTab extends ConsumerWidget {
           padding: kPagePadding,
           children: [
             _SourceBanner(insights: d),
-            NetworkHeadlineKpis(insights: d),
+            NetworkHeadlineKpis(insights: d, onOpenList: onOpenList),
             const SizedBox(height: kGap),
             AdoptionMatrixCard(insights: d, onTap: onShowSchools),
             const SizedBox(height: kGap),
@@ -41,14 +46,16 @@ class NetworkOverviewTab extends ConsumerWidget {
 }
 
 class NetworkInfrastructureTab extends ConsumerWidget {
-  const NetworkInfrastructureTab({super.key});
+  const NetworkInfrastructureTab({super.key, this.onOpenList});
+
+  final OpenSchoolList? onOpenList;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _Body(
         builder: (d) => ListView(
           padding: kPagePadding,
           children: [
-            InfrastructureCard(insights: d),
+            InfrastructureCard(insights: d, onOpenList: onOpenList),
             const SizedBox(height: kGap),
             _FaultsCard(insights: d),
           ],
@@ -73,15 +80,18 @@ class NetworkUsageTab extends ConsumerWidget {
 }
 
 class NetworkSchoolsTab extends ConsumerWidget {
-  const NetworkSchoolsTab({super.key, this.quadrant});
+  const NetworkSchoolsTab({super.key, this.quadrant, this.filter});
 
   final AdoptionQuadrant? quadrant;
+
+  /// Set when a headline tile sent its slice here.
+  final NetworkSchoolFilter? filter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _Body(
         builder: (d) => ListView(
           padding: kPagePadding,
-          children: [NetworkSchoolsTable(insights: d, initialQuadrant: quadrant)],
+          children: [NetworkSchoolsTable(insights: d, initialQuadrant: quadrant, initialFilter: filter)],
         ),
       );
 }
@@ -247,11 +257,12 @@ class _FaultsCard extends StatelessWidget {
     }
     return SectionCard(
       title: 'Technical intervention required',
-      subtitle: '${Fmt.int_(faults.length)} schools with an infrastructure or connectivity fault',
+      subtitle: '${Fmt.int_(faults.length)} schools with an infrastructure or connectivity fault · tap one for its record',
       child: Column(
         children: [
           for (final s in faults.take(40))
             CompactRow(
+              onTap: () => showSchoolNetworkDetail(context, s),
               title: s.name,
               subtitle: [
                 if (s.gatewayOnline == false) 'gateway offline',

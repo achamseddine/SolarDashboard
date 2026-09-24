@@ -295,26 +295,36 @@ class TwoColumn extends StatelessWidget {
 }
 
 /// Label/value line used in detail panels.
+///
+/// With [onTap] the whole line becomes a target and grows a chevron, so a
+/// figure in a card reads as something that can be opened.
 class InfoRow extends StatelessWidget {
-  const InfoRow(this.label, this.value, {super.key, this.valueColor});
+  const InfoRow(this.label, this.value, {super.key, this.valueColor, this.onTap});
   final String label;
   final String value;
   final Color? valueColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    final row = Padding(
+      padding: EdgeInsets.symmetric(vertical: 4, horizontal: onTap == null ? 0 : 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(flex: 2, child: Text(label, style: t.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))),
           Expanded(flex: 3, child: Text(value, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: valueColor), textAlign: TextAlign.right)),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
+          ],
         ],
       ),
     );
+    if (onTap == null) return row;
+    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8), child: row);
   }
 }
 

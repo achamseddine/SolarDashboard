@@ -92,6 +92,8 @@ class SchoolNetwork {
     this.teachers,
     // Infrastructure health (section 2)
     this.gatewayOnline,
+    this.gatewaysTotal = 0,
+    this.gatewaysOnline = 0,
     this.switchesTotal = 0,
     this.switchesOnline = 0,
     this.apsTotal = 0,
@@ -139,6 +141,14 @@ class SchoolNetwork {
   final int? teachers;
 
   final bool? gatewayOnline;
+
+  /// Gateways reported for the school, and how many of them answer. The
+  /// boolean above says whether *any* gateway is up, which is what a working
+  /// LAN needs; these two say how many are not, which is what a technician
+  /// is dispatched for.
+  final int gatewaysTotal;
+  final int gatewaysOnline;
+
   final int switchesTotal;
   final int switchesOnline;
   final int apsTotal;

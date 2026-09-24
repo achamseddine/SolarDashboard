@@ -24,6 +24,7 @@ class SchoolsDirectoryScreen extends ConsumerStatefulWidget {
     this.initialSolar,
     this.initialMonitored,
     this.initialFilter,
+    this.initialMaster,
   });
 
   final String? initialQuery;
@@ -43,6 +44,9 @@ class SchoolsDirectoryScreen extends ConsumerStatefulWidget {
   /// `solaronly`, `nosolar`, `unmonitored`.
   final String? initialFilter;
 
+  /// `1` when the caller counts master-list schools only.
+  final String? initialMaster;
+
   SchoolQuery get _routeQuery => SchoolQuery.fromRoute(
         query: initialQuery,
         region: initialRegion,
@@ -51,6 +55,7 @@ class SchoolsDirectoryScreen extends ConsumerStatefulWidget {
         solar: initialSolar,
         monitored: initialMonitored,
         filter: initialFilter,
+        master: initialMaster,
       );
 
   @override
@@ -87,7 +92,8 @@ class _SchoolsDirectoryScreenState extends ConsumerState<SchoolsDirectoryScreen>
         old.initialConnected != widget.initialConnected ||
         old.initialSolar != widget.initialSolar ||
         old.initialMonitored != widget.initialMonitored ||
-        old.initialFilter != widget.initialFilter;
+        old.initialFilter != widget.initialFilter ||
+        old.initialMaster != widget.initialMaster;
     if (changed) {
       _query = widget._routeQuery.copyWith(sort: _query.sort, ascending: _query.ascending);
       _search.text = _query.search;

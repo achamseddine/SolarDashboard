@@ -7,6 +7,7 @@ import '../../../core/utils/format.dart';
 import '../../common/widgets.dart';
 import '../../dashboard/widgets/dashboard_common.dart';
 import '../../programme/widgets/programme_common.dart';
+import 'connectivity_common.dart';
 
 const _maxRows = 10;
 
@@ -35,6 +36,10 @@ class DataPathCard extends StatelessWidget {
     return ProgrammeListCard(
       title: 'Plants without a data path',
       count: rows.length,
+      // The header count exceeds the rows shown as soon as there are more
+      // than ten; the whole list is one tap away rather than truncated in
+      // silence.
+      trailing: rows.isEmpty ? null : SeeAllButton(location: schoolsRoute(monitored: true, connected: false)),
       subtitle: 'Monitored plants at schools that are not on the internet roll-out',
       emptyText: loading
           ? 'Loading monitored plants…'

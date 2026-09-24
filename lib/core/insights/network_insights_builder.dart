@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../models/gwn.dart';
+import '../models/network_filter.dart';
 import '../models/network_insights.dart';
 import '../models/school.dart';
 
@@ -66,9 +67,16 @@ class NetworkInsightsBuilder {
       alarmsByNetwork.putIfAbsent(a.networkId, () => []).add(a);
     }
 
+    // The approved firmware is the release most of the ACCOUNT runs. Taken
+    // per school it would only measure whether a school is internally
+    // consistent, and two schools on different versions would both score
+    // full marks.
+    final approvedFirmware = _mode(devices.map((d) => d.firmware).whereType<String>().toList());
+
     final schools = <SchoolNetwork>[];
     for (final n in networks) {
       schools.add(_school(
+        approvedFirmware: approvedFirmware,
         network: n,
         devices: devicesByNetwork[n.id] ?? const [],
         days: daysByNetwork[n.id] ?? const [],
@@ -85,27 +93,23 @@ class NetworkInsightsBuilder {
     final uptimes = <double>[];
     final quadrants = {for (final q in AdoptionQuadrant.values) q: 0};
     for (final s in schools) {
-      if (s.seenOnline) connected++;
-      if (s.lanOperational) lan++;
-      final ap = s.apAvailability;
+      // Each headline reads the same predicate the dashboard's drill-down
+      // reads, so a tile and the list it opens can never disagree.
+      if (NetworkSchoolFilter.connected.matches(s, t)) connected++;
+      if (NetworkSchoolFilter.lanOperational.matches(s, t)) lan++;
       // Meaningful connectivity needs a real uptime figure, not one look.
-      if (s.uptimeShare != null && s.uptimeShare! >= t.uptimeTarget && (ap == null || ap >= t.apAvailabilityTarget)) {
-        meaningful++;
-      }
-      if ((s.activityShare ?? 0) >= t.activeUseShare) active++;
+      if (NetworkSchoolFilter.meaningfullyConnected.matches(s, t)) meaningful++;
+      if (NetworkSchoolFilter.activelyUsing.matches(s, t)) active++;
       // Adoption is only judged where use was actually observed. Counting a
       // school as "low adoption" because nothing has been measured yet is
       // exactly the punitive reading the framework warns against.
       // "High digital adoption" and "low / no adoption" are statements about
       // use, so they read the usage score. The composite index carries the
       // infrastructure weight too and would rate an unused school around 60.
-      final u = s.usageScore;
-      if (u != null) {
-        if (u >= t.highAdoptionIndex) high++;
-        if (u < t.lowAdoptionIndex) low++;
-      }
-      if (s.hasFault) technical++;
-      if (s.quadrant == AdoptionQuadrant.adoptionSupport) support++;
+      if (NetworkSchoolFilter.highAdoption.matches(s, t)) high++;
+      if (NetworkSchoolFilter.lowAdoption.matches(s, t)) low++;
+      if (NetworkSchoolFilter.technicalIntervention.matches(s, t)) technical++;
+      if (NetworkSchoolFilter.adoptionSupport.matches(s, t)) support++;
       if (s.uptimeShare != null) uptimes.add(s.uptimeShare!);
       activeUsers += (s.avgDailyClients ?? 0).round();
       quadrants[s.quadrant] = (quadrants[s.quadrant] ?? 0) + 1;
@@ -158,8 +162,10 @@ class NetworkInsightsBuilder {
       return RegionNetwork(
         region: e.key,
         schools: rows.length,
-        connected: rows.where((r) => (r.uptimeShare ?? 0) > 0).length,
-        active: rows.where((r) => (r.activityShare ?? 0) >= t.activeUseShare).length,
+        // Same predicates as the headline, so a governorate column and the
+        // portfolio figure above it mean the same thing.
+        connected: rows.where((r) => NetworkSchoolFilter.connected.matches(r, t)).length,
+        active: rows.where((r) => NetworkSchoolFilter.activelyUsing.matches(r, t)).length,
         meanIndex: idx.isEmpty ? null : idx.reduce((a, b) => a + b) / idx.length,
         meanUptime: ups.isEmpty ? null : ups.reduce((a, b) => a + b) / ups.length,
       );
@@ -205,6 +211,7 @@ class NetworkInsightsBuilder {
   // ------------------------------------------------------------ one school
 
   SchoolNetwork _school({
+    required String? approvedFirmware,
     required GwnNetwork network,
     required List<GwnDevice> devices,
     required List<GwnNetworkDay> days,
@@ -222,8 +229,7 @@ class NetworkInsightsBuilder {
     // Firmware compliance: the most common firmware in the account counts as
     // approved until a baseline is configured.
     final firmwares = devices.map((d) => d.firmware).whereType<String>().toList();
-    final approved = _mode(firmwares);
-    final firmwareCompliant = approved == null ? 0 : firmwares.where((f) => f == approved).length;
+    final firmwareCompliant = approvedFirmware == null ? 0 : firmwares.where((f) => f == approvedFirmware).length;
 
     final poeFailed = devices.map((d) => d.poePortsFailed ?? 0).fold<int>(0, (a, b) => a + b);
     final portsError = devices.map((d) => d.portsError ?? 0).fold<int>(0, (a, b) => a + b);
@@ -338,6 +344,8 @@ class NetworkInsightsBuilder {
       students: school?.students,
       teachers: school?.education?.pmTeachers,
       gatewayOnline: gatewayOnline,
+      gatewaysTotal: gateways.length,
+      gatewaysOnline: gateways.where((d) => d.isOnline).length,
       switchesTotal: switches.length,
       switchesOnline: switchesOnline,
       apsTotal: aps.length,

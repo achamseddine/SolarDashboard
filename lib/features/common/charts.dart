@@ -206,6 +206,7 @@ class EnergyBarChart extends StatelessWidget {
     this.maxLabels = 12,
     this.signed = false,
     this.emptyMessage = 'No energy data for this period',
+    this.onBarTap,
   });
 
   final List<String> seriesLabels;
@@ -225,6 +226,10 @@ class EnergyBarChart extends StatelessWidget {
   /// because that is where this chart began; anything else must say what it
   /// is actually missing.
   final String emptyMessage;
+
+  /// Called with the group index when a bar is tapped, so a day on the chart
+  /// can open what it is made of. The tooltip stays; this is the drill-down.
+  final void Function(int index)? onBarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -295,6 +300,13 @@ class EnergyBarChart extends StatelessWidget {
                   ),
                 ),
                 barTouchData: BarTouchData(
+                  touchCallback: onBarTap == null
+                      ? null
+                      : (event, response) {
+                          if (!event.isInterestedForInteractions) return;
+                          final i = response?.spot?.touchedBarGroupIndex;
+                          if (i != null && i >= 0 && i < groups.length) onBarTap!(i);
+                        },
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipColor: (_) => c.tooltipBg,
                     tooltipBorder: BorderSide(color: c.p.grid),
@@ -663,10 +675,14 @@ class RatioMeter extends StatelessWidget {
 
 /// Table twin of a chart — the accessible / exact-values view.
 class ChartTable extends StatelessWidget {
-  const ChartTable({super.key, required this.columns, required this.rows, this.maxHeight = 320});
+  const ChartTable({super.key, required this.columns, required this.rows, this.maxHeight = 320, this.onRowTap});
   final List<String> columns;
   final List<List<String>> rows;
   final double maxHeight;
+
+  /// Called with the row index when a row is tapped. A table cell is a
+  /// number like any other, and this is how it opens.
+  final void Function(int index)? onRowTap;
 
   @override
   Widget build(BuildContext context) {
@@ -683,7 +699,11 @@ class ChartTable extends StatelessWidget {
             columnSpacing: 20,
             columns: [for (final c in columns) DataColumn(label: Text(c))],
             rows: [
-              for (final r in rows) DataRow(cells: [for (final v in r) DataCell(Text(v, style: t))]),
+              for (var i = 0; i < rows.length; i++)
+                DataRow(
+                  onSelectChanged: onRowTap == null ? null : (_) => onRowTap!(i),
+                  cells: [for (final v in rows[i]) DataCell(Text(v, style: t))],
+                ),
             ],
           ),
         ),

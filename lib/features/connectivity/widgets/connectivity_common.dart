@@ -4,7 +4,12 @@ import '../../../core/models/connectivity_insights.dart';
 import '../../../core/theme.dart';
 
 /// Link into the school directory with the filters already applied.
-String schoolsRoute({String? query, String? region, String? caza, bool? connected, bool? solar, bool? monitored, String? filter}) {
+///
+/// [master] restricts the list to the MEHE master list, which is the
+/// population every figure on this page is counted over — without it the
+/// directory shows the orphan connectivity records the page leaves out, and
+/// the list disagrees with the tile it was opened from.
+String schoolsRoute({String? query, String? region, String? caza, bool? connected, bool? solar, bool? monitored, String? filter, bool master = true}) {
   String? tri(bool? v) => v == null ? null : (v ? '1' : '0');
   final q = <String, String>{
     'query': ?query,
@@ -14,6 +19,7 @@ String schoolsRoute({String? query, String? region, String? caza, bool? connecte
     'solar': ?tri(solar),
     'monitored': ?tri(monitored),
     'filter': ?filter,
+    'master': ?tri(master),
   };
   return Uri(path: '/schools', queryParameters: q.isEmpty ? null : q).toString();
 }

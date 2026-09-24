@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/connectivity_insights.dart';
+import '../../core/models/network_filter.dart';
 import '../../core/models/network_insights.dart';
 import '../../core/models/school_insights.dart';
 import '../../core/providers.dart';
@@ -33,6 +34,7 @@ class ConnectivityScreen extends ConsumerStatefulWidget {
 class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 5, vsync: this);
   AdoptionQuadrant? _quadrant;
+  NetworkSchoolFilter? _filter;
 
   @override
   void initState() {
@@ -59,7 +61,20 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
 
   /// Jumping from the matrix to the school list carries the filter with it.
   void _showSchools(AdoptionQuadrant quadrant) {
-    setState(() => _quadrant = quadrant);
+    setState(() {
+      _quadrant = quadrant;
+      _filter = null;
+    });
+    _tabs.animateTo(4);
+  }
+
+  /// …and so does jumping from a headline tile, which carries the slice that
+  /// produced the number rather than a quadrant.
+  void _showFiltered(NetworkSchoolFilter filter) {
+    setState(() {
+      _filter = filter;
+      _quadrant = null;
+    });
     _tabs.animateTo(4);
   }
 
@@ -86,10 +101,10 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
             controller: _tabs,
             children: [
               const _RolloutTab(),
-              NetworkOverviewTab(onShowSchools: _showSchools),
-              const NetworkInfrastructureTab(),
+              NetworkOverviewTab(onShowSchools: _showSchools, onOpenList: _showFiltered),
+              NetworkInfrastructureTab(onOpenList: _showFiltered),
               const NetworkUsageTab(),
-              NetworkSchoolsTab(quadrant: _quadrant),
+              NetworkSchoolsTab(quadrant: _quadrant, filter: _filter),
             ],
           ),
         ),

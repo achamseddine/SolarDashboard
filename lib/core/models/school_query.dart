@@ -36,10 +36,11 @@ class SchoolQuery {
     this.secondShift,
     this.sort = SchoolSort.name,
     this.ascending = true,
+    this.inMasterOnly = false,
   });
 
   /// Builds the initial query from route parameters.
-  factory SchoolQuery.fromRoute({String? query, String? region, String? caza, String? connected, String? solar, String? monitored, String? filter}) {
+  factory SchoolQuery.fromRoute({String? query, String? region, String? caza, String? connected, String? solar, String? monitored, String? filter, String? master}) {
     Tri tri(String? v) => v == null || v.isEmpty ? null : (v == '1' || v.toLowerCase() == 'true' || v.toLowerCase() == 'yes');
     final f = (filter ?? '').trim().toLowerCase();
     return SchoolQuery(
@@ -49,8 +50,17 @@ class SchoolQuery {
       connected: f == 'notconnected' ? false : (f == 'connected' ? true : tri(connected)),
       solarized: f == 'solaronly' ? true : (f == 'nosolar' ? false : tri(solar)),
       monitored: f == 'unmonitored' ? false : tri(monitored),
+      inMasterOnly: tri(master) ?? false,
     );
   }
+
+  /// Restricts the list to the MEHE master list.
+  ///
+  /// The connectivity dashboards count master-list schools only, so a tile
+  /// that opens the directory has to say so: without this the orphan
+  /// connectivity records the page explicitly excludes from its figures come
+  /// back in the list behind them.
+  final bool inMasterOnly;
 
   final String search;
   final String? region;
@@ -123,6 +133,7 @@ class SchoolQuery {
         secondShift: clearSecondShift ? null : (secondShift ?? this.secondShift),
         sort: sort ?? this.sort,
         ascending: ascending ?? this.ascending,
+        inMasterOnly: inMasterOnly,
       );
 
   /// Applies the filters and the sort to [all].
@@ -131,6 +142,7 @@ class SchoolQuery {
     final out = <SchoolInsight>[];
     for (final s in all) {
       final sc = s.school;
+      if (!sc.inMaster && inMasterOnly) continue;
       if (!sc.inMaster && region == null && caza == null && q.isEmpty && !sc.connected && sc.solar == null) continue;
       if (region != null && s.region != region) continue;
       if (caza != null && sc.caza != caza) continue;

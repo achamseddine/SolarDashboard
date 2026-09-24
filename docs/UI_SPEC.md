@@ -139,10 +139,28 @@ the governorate's share; solar tracker card; energy audit with the equipment inv
 when a plant is linked; education indicators. Works for schools with no plant and no solar record.
 
 ### Connectivity (`/connectivity`)
-Internet roll-out: connected schools and students reached, coverage per governorate (stacked bars plus
-share), the solar × internet matrix as four tiles and a donut, districts with the largest gap and the
-best served, and monitored plants at schools without a data path. Every tile deep-links into the
-directory with the matching filter.
+Five tabs. **Roll-out** is the MEHE membership list: connected schools and students reached, coverage
+per governorate (stacked bars plus share), the solar × internet matrix as four tiles and a donut,
+districts with the largest gap and the best served, and monitored plants at schools without a data
+path. Every tile deep-links into the directory with the matching filter, always with `master=1` — the
+page counts the MEHE master list, and without the flag the directory adds back the orphan connectivity
+records the page explicitly leaves out, so the list would be larger than the tile.
+
+The other four tabs are live telemetry from the GWN Cloud account against the School Digital
+Infrastructure & Adoption framework: **Network overview** (twelve headline indicators, the
+infrastructure × adoption matrix, the Technology Adoption Index with its components, the governorate
+roll-up and the indicators that need another source), **Infrastructure** (device availability per kind,
+PoE and port faults, firmware baseline, and the schools a technician should visit), **Usage** (the daily
+series the app accrues itself, and traffic by SSID) and **Schools** (the sortable per-school table).
+
+Every number-bearing box on these tabs opens what it is made of. The predicate behind each headline
+lives once, in `NetworkSchoolFilter`, and is read both by the builder that counts the figure and by the
+panel that lists the schools — a tile and its drill-down cannot disagree. Tapping a tile opens a sheet
+with the definition, the thresholds in force, the contributing schools and a button that carries the
+same slice to the Schools tab; tapping a school anywhere opens its full record; a figure inside a panel
+that has its own slice (for example "not matched to a school") opens in turn. A figure with nothing to
+list (a day on the chart, an SSID) opens its facts and says why there is no per-school breakdown, and a
+figure with nothing wrong (a device kind at full availability) is not a tap target at all.
 
 ### Students and teachers (`/education`)
 Student attendance per shift (mean over schools and weighted by students), attendance submission

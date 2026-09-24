@@ -44,6 +44,9 @@ class ConnectivityKpiGrid extends StatelessWidget {
           icon: Icons.groups_outlined,
           color: p.load,
           hint: '${Fmt.ratio(d.studentShare)} of enrolment',
+          // The students are the enrolment of the connected schools, so the
+          // list behind the figure is those schools.
+          onTap: () => goTo(context, schoolsRoute(connected: true)),
         ),
         KpiTile(
           label: 'Solar + internet',

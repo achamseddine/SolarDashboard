@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/models/network_filter.dart';
 import '../../../core/models/network_insights.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils/format.dart';
 import '../../common/widgets.dart';
 import '../../dashboard/widgets/dashboard_common.dart';
+import 'network_detail_sheet.dart';
 
 /// Every school with a monitored network, with the indicators a manager acts
 /// on and a filter for each quadrant of the matrix.
 class NetworkSchoolsTable extends StatefulWidget {
-  const NetworkSchoolsTable({super.key, required this.insights, this.initialQuadrant});
+  const NetworkSchoolsTable({super.key, required this.insights, this.initialQuadrant, this.initialFilter});
 
   final NetworkInsights insights;
   final AdoptionQuadrant? initialQuadrant;
+
+  /// A headline slice sent here from a tapped tile, shown as a chip that can
+  /// be cleared.
+  final NetworkSchoolFilter? initialFilter;
 
   @override
   State<NetworkSchoolsTable> createState() => _NetworkSchoolsTableState();
@@ -20,6 +26,7 @@ class NetworkSchoolsTable extends StatefulWidget {
 
 class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
   late AdoptionQuadrant? _quadrant = widget.initialQuadrant;
+  late NetworkSchoolFilter? _filter = widget.initialFilter;
   String _query = '';
   int _sort = 0;
   bool _asc = true;
@@ -28,12 +35,14 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
   void didUpdateWidget(covariant NetworkSchoolsTable old) {
     super.didUpdateWidget(old);
     if (old.initialQuadrant != widget.initialQuadrant) _quadrant = widget.initialQuadrant;
+    if (old.initialFilter != widget.initialFilter) _filter = widget.initialFilter;
   }
 
   List<SchoolNetwork> get _rows {
     final q = _query.trim().toLowerCase();
     final rows = widget.insights.schools.where((s) {
       if (_quadrant != null && s.quadrant != _quadrant) return false;
+      if (_filter != null && !_filter!.matches(s, widget.insights.thresholds)) return false;
       if (q.isEmpty) return true;
       return s.name.toLowerCase().contains(q) ||
           (s.region ?? '').toLowerCase().contains(q) ||
@@ -65,10 +74,23 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
     final rows = _rows;
     return SectionCard(
       title: 'Schools',
-      subtitle: '${Fmt.int_(rows.length)} of ${Fmt.int_(widget.insights.schools.length)} monitored schools',
+      subtitle: '${Fmt.int_(rows.length)} of ${Fmt.int_(widget.insights.schools.length)} monitored schools · tap a row for the full record',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_filter != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                avatar: const Icon(Icons.filter_alt_outlined, size: 18),
+                label: Text(_filter!.label),
+                onDeleted: () => setState(() => _filter = null),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(_filter!.what, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -121,7 +143,7 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
                     ],
                     rows: [
                       for (final s in rows)
-                        DataRow(cells: [
+                        DataRow(onSelectChanged: (_) => showSchoolNetworkDetail(context, s), cells: [
                           DataCell(_School(school: s)),
                           DataCell(Text(Fmt.ratio(s.uptimeShare, decimals: 1))),
                           DataCell(Text(s.avgDailyClients == null ? '–' : Fmt.int_(s.avgDailyClients!.round()))),
