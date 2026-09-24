@@ -32,6 +32,9 @@ class ConnectivityByRegionCard extends StatelessWidget {
                   rightFlex: 2,
                   left: EnergyBarChart(
                     height: 250,
+                    // The bars carry the same figures as the share list
+                    // beside them, so they lead to the same place.
+                    onBarTap: (i) => goTo(context, schoolsRoute(region: regions[i].name, connected: false)),
                     stacked: true,
                     seriesLabels: const ['Connected', 'Not connected'],
                     seriesColors: const [AppColors.unicefCyan, AppColors.muted],
@@ -68,7 +71,7 @@ class ConnectivityByRegionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const MutedNote('Tap a governorate to list its schools that are still without internet. The roll-out list carries membership only — no bandwidth, provider or uptime.'),
+                const MutedNote('Tap a governorate — on the bars or on the share beside them — to list its schools that are still without internet. The roll-out list carries membership only — no bandwidth, provider or uptime.'),
               ],
             ),
     );
