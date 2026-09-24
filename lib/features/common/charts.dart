@@ -497,7 +497,10 @@ class DonutChart extends StatelessWidget {
                   startDegreeOffset: -90,
                   pieTouchData: PieTouchData(
                     touchCallback: (event, response) {
-                      if (onTap == null || !event.isInterestedForInteractions) return;
+                      // A deliberate tap only. isInterestedForInteractions is
+                      // also true for hover and touch-down, which fired the
+                      // callback repeatedly as a finger slid over the chart.
+                      if (onTap == null || event is! FlTapUpEvent) return;
                       final idx = response?.touchedSection?.touchedSectionIndex;
                       if (idx != null && idx >= 0 && idx < visible.length) onTap!(slices.indexOf(visible[idx]));
                     },
@@ -574,7 +577,7 @@ class SocHistogram extends StatelessWidget {
           ),
           barTouchData: BarTouchData(
             touchCallback: (event, response) {
-              if (onTap == null || !event.isInterestedForInteractions) return;
+              if (onTap == null || event is! FlTapUpEvent) return;
               final idx = response?.spot?.touchedBarGroupIndex;
               if (idx != null) onTap!(idx);
             },
@@ -698,8 +701,9 @@ class ChartTable extends StatelessWidget {
             // Row taps must not turn the table into a selection list.
             showCheckboxColumn: false,
             headingRowHeight: 36,
-            dataRowMinHeight: 32,
-            dataRowMaxHeight: 36,
+            // A row that can be tapped has to be big enough to tap.
+            dataRowMinHeight: onRowTap == null ? 32 : 44,
+            dataRowMaxHeight: onRowTap == null ? 36 : 48,
             columnSpacing: 20,
             columns: [for (final c in columns) DataColumn(label: Text(c))],
             rows: [

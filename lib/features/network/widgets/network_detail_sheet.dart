@@ -141,115 +141,134 @@ class _DrillSheetState extends State<_DrillSheet> {
     final t = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final rows = _rows;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.85,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, controller) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: Text(d.title, style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
-                    const SizedBox(width: 12),
-                    Text(d.value, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: AppColors.unicefCyan)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(d.what, style: t.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                for (final f in d.facts)
-                  InfoRow(
-                    f.label,
-                    f.value,
-                    onTap: f.opens == null ? null : () => showNetworkDrill(context, f.opens!(), onOpenList: widget.onOpenList),
-                  ),
-                if (d.note != null) ...[
-                  const SizedBox(height: 6),
-                  Text(d.note!, style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-                if (d.rows.length > 8) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Search a school by name, CERD, governorate or district',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+    // The header scrolls with the list rather than sitting above it: a
+    // definition, two thresholds and a search field do not fit above a list
+    // when the sheet is dragged down, and an unscrollable header there
+    // overflows and takes the footer button off the bottom with it.
+    return Padding(
+      // The soft keyboard must not cover the list the search field filters.
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (context, controller) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: CustomScrollView(
+                controller: controller,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: Text(d.title, style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+                              const SizedBox(width: 12),
+                              Text(d.value, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: AppColors.unicefCyan)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(d.what, style: t.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                          for (final f in d.facts)
+                            InfoRow(
+                              f.label,
+                              f.value,
+                              onTap: f.opens == null ? null : () => showNetworkDrill(context, f.opens!(), onOpenList: widget.onOpenList),
+                            ),
+                          if (d.note != null) ...[
+                            const SizedBox(height: 6),
+                            Text(d.note!, style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                          ],
+                          if (d.rows.length > 8) ...[
+                            const SizedBox(height: 10),
+                            TextField(
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.search),
+                                hintText: 'Search a school by name, CERD, governorate or district',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (v) => setState(() => _query = v),
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          if (d.rows.isNotEmpty)
+                            Text(
+                              '${Fmt.int_(rows.length)} of ${Fmt.int_(d.rows.length)} schools · tap one for its full record',
+                              style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          const SizedBox(height: 6),
+                          const Divider(height: 1),
+                        ],
+                      ),
                     ),
-                    onChanged: (v) => setState(() => _query = v),
                   ),
-                ],
-                const SizedBox(height: 6),
-                if (d.rows.isNotEmpty)
-                  Text(
-                    '${Fmt.int_(rows.length)} of ${Fmt.int_(d.rows.length)} schools · tap one for its full record',
-                    style: t.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: rows.isEmpty
-                ? EmptyState(
-                    message: d.rows.isEmpty
-                        ? (d.emptyMessage ?? d.filter?.whenEmpty ?? 'No school falls under this figure.')
-                        : 'No school matches.',
-                    icon: d.rows.isEmpty ? Icons.info_outline : Icons.search_off,
-                  )
-                : ListView.builder(
-                    controller: controller,
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                    itemCount: rows.length,
-                    itemBuilder: (context, i) {
-                      final s = rows[i];
-                      final m = d.metric?.call(s);
-                      return CompactRow(
-                        title: s.name,
-                        subtitle: [
-                          if (s.cerd != null) 'CERD ${s.cerd}' else 'not matched to a school',
-                          ?s.region,
-                          ?s.caza,
-                        ].join(' · '),
-                        trailing: m?.value,
-                        trailingHint: m?.hint,
-                        onTap: () => showSchoolNetworkDetail(context, s),
-                      );
-                    },
-                  ),
-          ),
-          // Nothing to open when the slice listed nothing.
-          if (d.filter != null && widget.onOpenList != null && d.rows.isNotEmpty)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () {
-                        // A drill opened from inside another drill leaves two
-                        // panels on the stack; both have to go or the table
-                        // opens underneath them.
-                        Navigator.of(context).popUntil((r) => r.settings.name != _sheetRoute);
-                        widget.onOpenList!(d.filter!);
-                      },
-                      icon: const Icon(Icons.table_rows_outlined, size: 18),
-                      label: const Text('Open in the Schools tab'),
+                  if (rows.isEmpty)
+                    SliverToBoxAdapter(
+                      child: EmptyState(
+                        message: d.rows.isEmpty
+                            ? (d.emptyMessage ?? d.filter?.whenEmpty ?? 'No school falls under this figure.')
+                            : 'No school matches.',
+                        icon: d.rows.isEmpty ? Icons.info_outline : Icons.search_off,
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      sliver: SliverList.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (context, i) {
+                          final s = rows[i];
+                          final m = d.metric?.call(s);
+                          return CompactRow(
+                            title: s.name,
+                            subtitle: [
+                              if (s.cerd != null) 'CERD ${s.cerd}' else 'not matched to a school',
+                              ?s.region,
+                              ?s.caza,
+                            ].join(' · '),
+                            trailing: m?.value,
+                            trailingHint: m?.hint,
+                            onTap: () => showSchoolNetworkDetail(context, s),
+                          );
+                        },
+                      ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
-        ],
+            if (d.filter != null && widget.onOpenList != null && d.rows.isNotEmpty)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () {
+                          // A drill opened from inside another drill leaves
+                          // two panels on the stack; both have to go or the
+                          // table opens underneath them.
+                          Navigator.of(context).popUntil((r) => r.settings.name != _sheetRoute);
+                          widget.onOpenList!(d.filter!);
+                        },
+                        icon: const Icon(Icons.table_rows_outlined, size: 18),
+                        label: const Text('Open in the Schools tab'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

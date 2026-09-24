@@ -324,7 +324,12 @@ class InfoRow extends StatelessWidget {
       ),
     );
     if (onTap == null) return row;
-    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8), child: row);
+    // A tappable line needs a finger-sized target, not a text-sized one.
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(child: row)),
+    );
   }
 }
 

@@ -97,6 +97,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a filter cleared on the Schools tab stays cleared', (tester) async {
+    final env = await TestEnv.createFor(tester, schools: 10, networks: 30);
+    addTearDown(env.dispose);
+    await openOverview(tester, env);
+
+    await tester.tap(find.widgetWithText(KpiTile, 'Schools connected'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Open in the Schools tab'));
+    await tester.pumpAndSettle();
+    await TestEnv.settle(tester, rounds: 4);
+    final chip = find.widgetWithText(InputChip, 'Schools connected');
+    expect(chip, findsOneWidget);
+
+    // Clearing the chip has to reach the screen, or leaving the tab and
+    // coming back brings the filter with it.
+    tester.widget<InputChip>(chip).onDeleted!();
+    await TestEnv.settle(tester, rounds: 4);
+    expect(find.widgetWithText(InputChip, 'Schools connected'), findsNothing);
+
+    await tester.tap(find.widgetWithText(Tab, 'Roll-out'));
+    await TestEnv.settle(tester, rounds: 6);
+    await tester.tap(find.widgetWithText(Tab, 'Schools'));
+    await TestEnv.settle(tester, rounds: 6);
+    expect(find.widgetWithText(InputChip, 'Schools connected'), findsNothing);
+
+    // …and the same tile can send it here again.
+    await tester.tap(find.widgetWithText(Tab, 'Network overview'));
+    await TestEnv.settle(tester, rounds: 6);
+    await tester.tap(find.widgetWithText(KpiTile, 'Schools connected'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Open in the Schools tab'));
+    await tester.pumpAndSettle();
+    await TestEnv.settle(tester, rounds: 4);
+    expect(find.widgetWithText(InputChip, 'Schools connected'), findsOneWidget);
+  });
+
   testWidgets('infrastructure figures open the schools behind them', (tester) async {
     final env = await TestEnv.createFor(tester, schools: 10, networks: 30);
     addTearDown(env.dispose);

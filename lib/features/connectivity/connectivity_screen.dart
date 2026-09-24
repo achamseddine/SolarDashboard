@@ -81,6 +81,16 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
     _tabs.animateTo(4);
   }
 
+  /// The Schools tab owns its chips; the screen follows them so a filter
+  /// cleared there does not return the next time the tab is built.
+  void _onSelection(AdoptionQuadrant? quadrant, NetworkSchoolFilter? filter) {
+    if (quadrant == _quadrant && filter == _filter) return;
+    setState(() {
+      _quadrant = quadrant;
+      _filter = filter;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -107,7 +117,7 @@ class _ConnectivityScreenState extends ConsumerState<ConnectivityScreen> with Si
               NetworkOverviewTab(onShowSchools: _showSchools, onOpenList: _showFiltered),
               NetworkInfrastructureTab(onOpenList: _showFiltered),
               const NetworkUsageTab(),
-              NetworkSchoolsTab(quadrant: _quadrant, filter: _filter, revision: _jump),
+              NetworkSchoolsTab(quadrant: _quadrant, filter: _filter, revision: _jump, onSelectionChanged: _onSelection),
             ],
           ),
         ),

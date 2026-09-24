@@ -11,7 +11,14 @@ import 'network_detail_sheet.dart';
 /// Every school with a monitored network, with the indicators a manager acts
 /// on and a filter for each quadrant of the matrix.
 class NetworkSchoolsTable extends StatefulWidget {
-  const NetworkSchoolsTable({super.key, required this.insights, this.initialQuadrant, this.initialFilter, this.revision = 0});
+  const NetworkSchoolsTable({
+    super.key,
+    required this.insights,
+    this.initialQuadrant,
+    this.initialFilter,
+    this.revision = 0,
+    this.onSelectionChanged,
+  });
 
   final NetworkInsights insights;
   final AdoptionQuadrant? initialQuadrant;
@@ -24,6 +31,10 @@ class NetworkSchoolsTable extends StatefulWidget {
   /// tapping the same tile again would arrive with an unchanged filter and
   /// leave the table showing everything.
   final int revision;
+
+  /// Tells the screen what the chips now say, so a filter cleared here does
+  /// not come back the next time this tab is built.
+  final void Function(AdoptionQuadrant? quadrant, NetworkSchoolFilter? filter)? onSelectionChanged;
 
   @override
   State<NetworkSchoolsTable> createState() => _NetworkSchoolsTableState();
@@ -73,6 +84,15 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
     return rows;
   }
 
+  /// Applies a chip and tells the screen, so the two cannot drift apart.
+  void _select({AdoptionQuadrant? quadrant, NetworkSchoolFilter? filter}) {
+    setState(() {
+      _quadrant = quadrant;
+      _filter = filter;
+    });
+    widget.onSelectionChanged?.call(quadrant, filter);
+  }
+
   void _sortBy(int column, bool ascending) => setState(() {
         _sort = column;
         _asc = ascending;
@@ -93,7 +113,7 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
               child: InputChip(
                 avatar: const Icon(Icons.filter_alt_outlined, size: 18),
                 label: Text(_filter!.label),
-                onDeleted: () => setState(() => _filter = null),
+                onDeleted: () => _select(quadrant: _quadrant),
               ),
             ),
             const SizedBox(height: 4),
@@ -108,14 +128,14 @@ class _NetworkSchoolsTableState extends State<NetworkSchoolsTable> {
               ChoiceChip(
                 label: const Text('All'),
                 selected: _quadrant == null,
-                onSelected: (_) => setState(() => _quadrant = null),
+                onSelected: (_) => _select(filter: _filter),
               ),
               for (final q in AdoptionQuadrant.values)
                 if ((widget.insights.quadrants[q] ?? 0) > 0)
                   ChoiceChip(
                     label: Text('${q.label} ${widget.insights.quadrants[q]}'),
                     selected: _quadrant == q,
-                    onSelected: (_) => setState(() => _quadrant = _quadrant == q ? null : q),
+                    onSelected: (_) => _select(quadrant: _quadrant == q ? null : q, filter: _filter),
                   ),
             ],
           ),

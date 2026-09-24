@@ -80,7 +80,7 @@ class NetworkUsageTab extends ConsumerWidget {
 }
 
 class NetworkSchoolsTab extends ConsumerWidget {
-  const NetworkSchoolsTab({super.key, this.quadrant, this.filter, this.revision = 0});
+  const NetworkSchoolsTab({super.key, this.quadrant, this.filter, this.revision = 0, this.onSelectionChanged});
 
   final AdoptionQuadrant? quadrant;
 
@@ -90,11 +90,22 @@ class NetworkSchoolsTab extends ConsumerWidget {
   /// Rises on every jump, so the same slice can be sent twice.
   final int revision;
 
+  /// What the table's own chips now say.
+  final void Function(AdoptionQuadrant? quadrant, NetworkSchoolFilter? filter)? onSelectionChanged;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) => _Body(
         builder: (d) => ListView(
           padding: kPagePadding,
-          children: [NetworkSchoolsTable(insights: d, initialQuadrant: quadrant, initialFilter: filter, revision: revision)],
+          children: [
+            NetworkSchoolsTable(
+              insights: d,
+              initialQuadrant: quadrant,
+              initialFilter: filter,
+              revision: revision,
+              onSelectionChanged: onSelectionChanged,
+            ),
+          ],
         ),
       );
 }
