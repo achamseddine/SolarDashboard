@@ -52,6 +52,23 @@ void main() {
     );
   });
 
+  test('an unreported day is told apart from a day with nothing on it', () async {
+    final env = await TestEnv.create(schools: 8, networks: 20);
+    addTearDown(env.dispose);
+    final d = await _build(env);
+
+    // The portfolio series are padded across every day in the window so the
+    // chart has one bar per day; the day panel has to read the days that
+    // actually carried a figure, or it prints "0 devices" for a day nobody
+    // reported.
+    for (final day in d.daysReportingClients) {
+      expect(d.dailyClients.map((x) => x.day), contains(day));
+    }
+    final padded = d.dailyClients.where((x) => !d.daysReportingClients.contains(x.day));
+    expect(padded.every((x) => x.clients == 0), isTrue, reason: 'a padded day should carry no figure of its own');
+    expect(d.daysReportingTraffic.length, lessThanOrEqualTo(d.dailyBytes.length));
+  });
+
   test('a slice never judges a school nobody measured', () async {
     final env = await TestEnv.create(schools: 8, networks: 30);
     addTearDown(env.dispose);

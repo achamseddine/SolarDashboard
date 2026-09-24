@@ -195,6 +195,8 @@ class NetworkInsightsBuilder {
       dailyClients: [for (final d in dayKeys) (day: d, clients: clientsByDay[d] ?? 0)],
       dailyBytes: [for (final d in dayKeys) (day: d, bytes: bytesByDay[d] ?? 0)],
       dailyApsOnline: [for (final d in dayKeys) (day: d, aps: apsByDay[d] ?? 0)],
+      daysReportingClients: clientsByDay.keys.toList()..sort(),
+      daysReportingTraffic: bytesByDay.keys.toList()..sort(),
       dailyUptime: [
         for (final d in dayKeys)
           if (upByDay[d] != null && upByDay[d]!.isNotEmpty)

@@ -609,8 +609,11 @@ class NetworkTrendCard extends StatelessWidget {
   /// A day on the chart opens what that day was made of.
   void _showDay(BuildContext context, String day, {required bool hasClients}) {
     final d = insights;
-    final clients = d.dailyClients.where((x) => x.day == day).firstOrNull?.clients;
-    final bytes = d.dailyBytes.where((x) => x.day == day).firstOrNull?.bytes;
+    // The series are padded across the window, so a day has to be checked
+    // against what was actually reported: a day nobody reported is not a day
+    // with no devices on it.
+    final clients = d.daysReportingClients.contains(day) ? d.dailyClients.where((x) => x.day == day).firstOrNull?.clients : null;
+    final bytes = d.daysReportingTraffic.contains(day) ? d.dailyBytes.where((x) => x.day == day).firstOrNull?.bytes : null;
     final aps = d.dailyApsOnline.where((x) => x.day == day).firstOrNull?.aps;
     final uptime = d.dailyUptime.where((x) => x.day == day).firstOrNull?.uptime;
     showNetworkDrill(
@@ -624,7 +627,7 @@ class NetworkTrendCard extends StatelessWidget {
         facts: [
           DrillFact('Client devices', clients == null ? 'not reported' : Fmt.int_(clients)),
           DrillFact('Access points online', aps == null ? 'not reported' : Fmt.int_(aps)),
-          DrillFact('Traffic', bytes == null || bytes == 0 ? 'not reported' : Fmt.bytes(bytes)),
+          DrillFact('Traffic', bytes == null ? 'not reported' : Fmt.bytes(bytes)),
           DrillFact('Mean uptime', Fmt.ratio(uptime, decimals: 1)),
         ],
         emptyMessage: 'These are portfolio totals for the day. The per-school split is kept for the current state '

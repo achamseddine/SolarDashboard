@@ -264,6 +264,8 @@ class NetworkInsights {
     required this.dailyBytes,
     this.dailyApsOnline = const [],
     required this.dailyUptime,
+    this.daysReportingClients = const [],
+    this.daysReportingTraffic = const [],
     required this.ssidTraffic,
     required this.thresholds,
     required this.lastSyncTs,
@@ -311,6 +313,12 @@ class NetworkInsights {
   /// reports no client counts, so the usage page has something real to show.
   final List<({String day, int aps})> dailyApsOnline;
   final List<({String day, double uptime})> dailyUptime;
+
+  /// Days the account actually returned a figure for. The series above are
+  /// padded across every day in the window, so without these a day nobody
+  /// reported reads as a day with nothing on it.
+  final List<String> daysReportingClients;
+  final List<String> daysReportingTraffic;
 
   /// Traffic per SSID over the window, largest first.
   final List<({String ssid, int bytes, int clients})> ssidTraffic;
