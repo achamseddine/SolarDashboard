@@ -199,15 +199,30 @@ class SchoolNetwork {
   double? get firmwareCompliance => firmwareTotal == 0 ? null : firmwareCompliant / firmwareTotal;
   double? get activityShare => schoolDays == 0 ? null : daysWithActivity / schoolDays;
 
+  /// Share of APs that must be up for the LAN to count as working when the
+  /// account exposes no gateway to ask.
+  static const double apMajority = 0.5;
+
   /// A school has a working LAN when its gateway answers and the agreed share
   /// of its APs is up.
+  ///
+  /// Some accounts expose access points only — no gateway or switch is listed
+  /// at all. Demanding a gateway there would report every school's LAN as
+  /// down, so absence falls back to the access points; a gateway that is
+  /// present and offline still fails.
   bool get lanOperational {
-    if (gatewayOnline != true) return false;
+    if (gatewayOnline == false) return false;
     final ap = apAvailability;
-    return ap == null || ap >= 0.5;
+    if (gatewayOnline == null) return ap != null && ap >= apMajority;
+    return ap == null || ap >= apMajority;
   }
 
-  bool get hasFault => gatewayOnline == false || openCriticalAlarms > 0 || poePortsFailed > 0 || portsError > 0;
+  /// Most of a school's access points being down is an infrastructure fault
+  /// whether or not a gateway is reported for it.
+  bool get apsMostlyDown => apAvailability != null && apAvailability! < apMajority;
+
+  bool get hasFault =>
+      gatewayOnline == false || apsMostlyDown || openCriticalAlarms > 0 || poePortsFailed > 0 || portsError > 0;
 
   double? scoreOf(String label) => components.where((c) => c.label == label).firstOrNull?.score;
 }

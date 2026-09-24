@@ -66,7 +66,7 @@ class NetworkHeadlineKpis extends StatelessWidget {
         KpiTile(
           label: 'Technical intervention',
           value: Fmt.int_(d.technicalIntervention),
-          hint: 'gateway down, failed ports or open critical alarms',
+          hint: 'gateway or most access points down, failed ports, or open critical alarms',
           icon: Icons.build_outlined,
           color: AppColors.critical,
         ),
@@ -171,7 +171,10 @@ class AdoptionMatrixCard extends StatelessWidget {
           if ((q[AdoptionQuadrant.unknown] ?? 0) > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: MutedNote('${Fmt.int_(q[AdoptionQuadrant.unknown])} schools have too few reporting days to be placed.'),
+              child: MutedNote(
+                '${Fmt.int_(q[AdoptionQuadrant.unknown])} schools cannot be placed yet: the usage axis needs a client '
+                'count or traffic figure, and nothing has been measured for them so far.',
+              ),
             ),
         ],
       ),

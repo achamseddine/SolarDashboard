@@ -255,6 +255,7 @@ class _FaultsCard extends StatelessWidget {
               title: s.name,
               subtitle: [
                 if (s.gatewayOnline == false) 'gateway offline',
+                if (s.apsMostlyDown) 'most access points down',
                 if (s.apsTotal > 0 && s.apsOnline < s.apsTotal) '${s.apsTotal - s.apsOnline} of ${s.apsTotal} APs down',
                 if (s.poePortsFailed > 0) '${s.poePortsFailed} PoE ports failed',
                 if (s.portsError > 0) '${s.portsError} ports with errors',

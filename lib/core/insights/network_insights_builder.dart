@@ -266,6 +266,10 @@ class NetworkInsightsBuilder {
       if (older > 0) growth = (newer - older) / older;
     }
 
+    // Days that carry a client count or traffic figure — the only ones that
+    // can speak to how much the network is used.
+    final measuredDays = days.where((d) => d.uniqueClients != null || d.totalBytes != null).length;
+
     // -------------------------------------------------------------- scores
     final infraParts = <double>[
       if (gatewayOnline != null) gatewayOnline ? 1 : 0,
@@ -280,16 +284,25 @@ class NetworkInsightsBuilder {
       ?activeApShare,
       if (avgClients != null) math.min(1.0, avgClients / math.max(1, 2 * thresholds.activeDayClients)),
     ];
-    final wifi = wifiParts.isEmpty ? null : 100 * wifiParts.reduce((a, b) => a + b) / wifiParts.length;
+    final wifi = wifiParts.isEmpty || measuredDays == 0
+        ? null
+        : 100 * wifiParts.reduce((a, b) => a + b) / wifiParts.length;
 
-    final regularity = days.isEmpty ? null : 100 * activeDays / days.length;
+    // Days that measured no use say nothing about regularity; scoring them
+    // zero would read as "nobody used it" rather than "nobody looked".
+    final regularity = measuredDays == 0 ? null : 100 * activeDays / measuredDays;
 
+    // A component with no score says why: a source the app is not connected
+    // to, or simply not enough looks yet.
+    const notEnoughLooks = 'several checks a day before a share can be computed';
+    const noUsageYet = 'a client count or traffic figure from the cloud';
     final components = <IndexComponent>[
-      IndexComponent('Infrastructure availability', wInfrastructure, infra),
-      IndexComponent('Internet reliability', wInternet, internet),
+      IndexComponent('Infrastructure availability', wInfrastructure, infra,
+          missingSource: infra == null ? 'devices reported for this network' : null),
+      IndexComponent('Internet reliability', wInternet, internet, missingSource: internet == null ? notEnoughLooks : null),
       const IndexComponent('Connectivity quality', wQuality, null, missingSource: 'speed, latency and packet-loss tests'),
-      IndexComponent('Wi-Fi utilisation', wWifi, wifi),
-      IndexComponent('Regularity of usage', wRegularity, regularity),
+      IndexComponent('Wi-Fi utilisation', wWifi, wifi, missingSource: wifi == null ? noUsageYet : null),
+      IndexComponent('Regularity of usage', wRegularity, regularity, missingSource: regularity == null ? noUsageYet : null),
       const IndexComponent('Teacher / platform adoption', wTeacher, null, missingSource: 'learning-platform analytics'),
       const IndexComponent('Student / platform adoption', wStudent, null, missingSource: 'learning-platform analytics'),
       const IndexComponent('Digital-learning application usage', wLearning, null, missingSource: 'learning-platform analytics'),
@@ -304,9 +317,6 @@ class NetworkInsightsBuilder {
     // other, so a healthy school with no use is told apart from a used school
     // with a broken network.
     final usageParts = <double>[?wifi, ?regularity];
-    // Days that carry no client or traffic figure say nothing about use, so
-    // they must not be read as "no use".
-    final measuredDays = days.where((d) => d.uniqueClients != null || d.totalBytes != null).length;
     final usage = usageParts.isEmpty || measuredDays == 0
         ? null
         : usageParts.reduce((a, b) => a + b) / usageParts.length;
