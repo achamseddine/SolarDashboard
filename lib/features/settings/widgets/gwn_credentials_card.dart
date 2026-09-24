@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/api/gwn_api_client.dart';
+import '../../../core/api/gwn_api_client.dart' show GwnApiClient, gwnKeyFingerprint;
+import '../../../core/api/gwn_api_exception.dart';
 import '../../../core/api/gwn_endpoints.dart';
 import '../../../core/models/gwn_credentials.dart';
 import '../../../core/providers.dart';
+import '../../../core/utils/format.dart';
 import '../../common/widgets.dart';
 
 /// GWN Cloud account used by the school-network dashboards.
@@ -18,7 +21,13 @@ class GwnCredentialsCard extends ConsumerStatefulWidget {
   ConsumerState<GwnCredentialsCard> createState() => _GwnCredentialsCardState();
 }
 
-class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
+class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> with AutomaticKeepAliveClientMixin {
+  // Settings is a lazy list: without this the card is disposed when it
+  // scrolls away and rebuilt from the saved values, silently throwing away a
+  // key that had been typed but not yet saved.
+  @override
+  bool get wantKeepAlive => true;
+
   final _form = GlobalKey<FormState>();
   late final TextEditingController _appId;
   late final TextEditingController _secret;
@@ -45,8 +54,8 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
   }
 
   GwnCredentials get _entered => GwnCredentials(
-        appId: _appId.text.trim(),
-        secretKey: _secret.text.trim(),
+        appId: GwnCredentials.clean(_appId.text),
+        secretKey: GwnCredentials.clean(_secret.text),
         baseUrl: _baseUrl,
       );
 
@@ -56,7 +65,11 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
       _busy = true;
       _result = null;
     });
-    final client = GwnApiClient(credentials: _entered);
+    final client = GwnApiClient(
+      credentials: _entered,
+      lastSuccess: ref.read(gwnLastAuthProvider),
+      onAuthenticated: (a) => ref.read(gwnLastAuthProvider.notifier).record(a),
+    );
     try {
       await client.authenticate();
       final networks = await client.listNetworks();
@@ -84,7 +97,7 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
     } catch (e) {
       setState(() {
         _ok = false;
-        _result = '$e';
+        _result = e is GwnApiException ? e.message : '$e';
       });
     } finally {
       client.close();
@@ -108,12 +121,38 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
       if (mounted) {
         setState(() {
           _ok = false;
-          _result = '$e';
+          _result = e is GwnApiException ? e.message : '$e';
         });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Thirty-two random characters typed on a tablet keyboard is a typo
+  /// waiting to happen, and the field is narrower than the key, so a
+  /// mistake at the end is invisible. Pasting avoids both.
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      setState(() {
+        _ok = false;
+        _result = 'The clipboard is empty. Copy the Secret Key from GWN Cloud first.';
+      });
+      return;
+    }
+    final key = GwnCredentials.clean(text);
+    _secret.text = key;
+    final n = key.length;
+    final expected = GwnCredentials.usualKeyLength;
+    setState(() {
+      _ok = n == expected;
+      _result = n == expected
+          ? 'Pasted $n characters. Test the connection, or Save and sync.'
+          : 'Pasted $n characters — GWN issues $expected, so ${n < expected ? 'this is ${expected - n} short' : 'this has ${n - expected} too many'}. '
+              'Copy the key again from GWN Cloud.';
+    });
   }
 
   Future<void> _clear() async {
@@ -127,12 +166,25 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final t = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final saved = ref.watch(gwnCredentialsProvider);
+    final lastAuth = ref.watch(gwnLastAuthProvider);
     return SectionCard(
       title: 'GWN Cloud account (school networks)',
-      subtitle: saved == null ? 'Not configured — the network dashboards show demo data' : 'Configured · ${saved.baseUrl}',
+      // What is stored, described without being revealed: after a Save this
+      // is how an operator checks that what reached the secure store is what
+      // they meant to put there.
+      subtitle: saved == null
+          ? 'Not configured — the network dashboards show demo data'
+          : [
+              'Configured · ${saved.baseUrl} · App ID ${saved.appId}',
+              'stored key ${GwnCredentials.clean(saved.secretKey).length} characters',
+              if (GwnCredentials.clean(saved.secretKey).length >= 16)
+                'fingerprint ${gwnKeyFingerprint(GwnCredentials.clean(saved.secretKey))}',
+              if (lastAuth != null) 'last worked ${Fmt.ago(lastAuth.ts)} with fingerprint ${lastAuth.fingerprint}',
+            ].join(' · '),
       child: Form(
         key: _form,
         child: Column(
@@ -153,24 +205,70 @@ class _GwnCredentialsCardState extends ConsumerState<GwnCredentialsCard> {
                   child: TextFormField(
                     controller: _appId,
                     validator: _required,
+                    keyboardType: TextInputType.number,
+                    autocorrect: false,
+                    enableSuggestions: false,
                     decoration: const InputDecoration(labelText: 'App ID', border: OutlineInputBorder(), isDense: true),
                   ),
                 ),
                 SizedBox(
                   width: 340,
-                  child: TextFormField(
-                    controller: _secret,
-                    validator: _required,
-                    obscureText: !_showSecret,
-                    decoration: InputDecoration(
-                      labelText: 'Secret Key',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: IconButton(
-                        icon: Icon(_showSecret ? Icons.visibility_off : Icons.visibility, size: 18),
-                        onPressed: () => setState(() => _showSecret = !_showSecret),
-                      ),
-                    ),
+                  // The count under the field is the only way to see that the
+                  // whole key arrived: the field is narrower than the key, so
+                  // the last characters sit out of view.
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _secret,
+                    builder: (context, value, _) {
+                      final raw = value.text;
+                      final key = GwnCredentials.clean(raw);
+                      final stripped = raw.trim().length - key.length;
+                      return TextFormField(
+                        controller: _secret,
+                        validator: _required,
+                        obscureText: !_showSecret,
+                        // A credential must not be offered to the keyboard's
+                        // autocorrect, which can rewrite what was typed.
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        keyboardType: TextInputType.visiblePassword,
+                        style: const TextStyle(fontFamily: 'monospace'),
+                        decoration: InputDecoration(
+                          labelText: 'Secret Key',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          helperText: key.isEmpty
+                              ? 'Paste the key issued in GWN Cloud'
+                              : [
+                                  '${key.length} characters',
+                                  if (key.length < GwnCredentials.usualKeyLength) '${GwnCredentials.usualKeyLength - key.length} short',
+                                  if (key.length > GwnCredentials.usualKeyLength) '${key.length - GwnCredentials.usualKeyLength} too many',
+                                  if (stripped > 0) '$stripped invisible character${stripped == 1 ? '' : 's'} removed',
+                                  if (key.length >= 16) 'fingerprint ${gwnKeyFingerprint(key)}',
+                                ].join(' · '),
+                          helperStyle: key.isNotEmpty && key.length != GwnCredentials.usualKeyLength
+                              ? TextStyle(color: Theme.of(context).colorScheme.error)
+                              : null,
+                          suffixIconConstraints: const BoxConstraints(minWidth: 76, minHeight: 40),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Paste',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.content_paste, size: 18),
+                                onPressed: _busy ? null : _paste,
+                              ),
+                              IconButton(
+                                tooltip: _showSecret ? 'Hide' : 'Show',
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(_showSecret ? Icons.visibility_off : Icons.visibility, size: 18),
+                                onPressed: () => setState(() => _showSecret = !_showSecret),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 SizedBox(

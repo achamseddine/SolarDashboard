@@ -44,7 +44,7 @@ class _TextTransformer extends Transformer {
 /// which Settings shows so an operator can see what the account actually
 /// accepted.
 class GwnApiClient implements GwnApi {
-  GwnApiClient({required GwnCredentials credentials, Dio? dio})
+  GwnApiClient({required GwnCredentials credentials, Dio? dio, this.lastSuccess, this.onAuthenticated})
       : _credentials = credentials,
         _probeAdapter = dio?.httpClientAdapter,
         _dio = dio ??
@@ -102,17 +102,32 @@ class GwnApiClient implements GwnApi {
     if (!_credentials.isComplete) {
       throw GwnApiException('GWN Cloud credentials are incomplete', code: 'AUTH');
     }
-    final id = _credentials.appId.trim();
-    final secret = _credentials.secretKey.trim();
+    final id = GwnCredentials.clean(_credentials.appId);
+    final secret = GwnCredentials.clean(_credentials.secretKey);
     final basic = base64Encode(utf8.encode('$id:$secret'));
 
-    // The reference examples use the first of these. The other two are the
-    // standard client_credentials spellings, tried only if the first is
-    // rejected — a deployment may accept one and not another.
+    // A query string is written to every access log between here and the
+    // origin, so the strategy that puts the Secret Key in the URL is tried
+    // LAST — only if the deployment accepts nothing else. The rest of this
+    // client never transmits the key at all: it is hashed into a signature.
+    //
+    // The remaining two are the standard client_credentials spellings; a
+    // deployment may accept one and not another.
     final strategies = <({String label, String method, Map<String, Object?>? query, Object? body, Map<String, String>? headers})>[
+      // Each value is percent-encoded: a key carrying a '+', '&' or '=' would
+      // otherwise be a different key by the time the server parsed the body.
+      (
+        label: 'POST form',
+        method: 'POST',
+        query: null,
+        body: 'grant_type=client_credentials'
+            '&client_id=${Uri.encodeQueryComponent(id)}'
+            '&client_secret=${Uri.encodeQueryComponent(secret)}',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+      ),
+      (label: 'POST basic auth', method: 'POST', query: null, body: 'grant_type=client_credentials', headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Authorization': 'Basic $basic'}),
+      // Last: the only strategy that puts the key in a URL.
       (label: 'GET query', method: 'GET', query: {'grant_type': 'client_credentials', 'client_id': id, 'client_secret': secret}, body: null, headers: null),
-      (label: 'POST form', method: 'POST', query: null, body: 'grant_type=client_credentials&client_id=$id&client_secret=$secret', headers: {'Content-Type': 'application/x-www-form-urlencoded'}),
-      (label: 'POST basic auth', method: 'POST', query: null, body: 'grant_type=client_credentials', headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Basic $basic'}),
     ];
 
     final attempts = <String>[];
@@ -131,19 +146,36 @@ class GwnApiClient implements GwnApi {
             asInt(pick(asMap(pick(json, ['data', 'result'])), ['expires_in', 'expiresIn']));
         _tokenExpiresAt = ttl == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000 + (ttl * 0.8).round();
         lastProbe['token'] = '${GwnEndpoints.token} (${st.label})';
+        onAuthenticated?.call(GwnLastAuth(
+          appId: id,
+          host: _host,
+          keyLength: secret.length,
+          fingerprint: gwnKeyFingerprint(secret),
+          ts: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          strategy: st.label,
+        ));
         return;
       } on GwnApiException catch (e) {
-        attempts.add('${GwnEndpoints.token} (${st.label}): ${e.status == null ? e.message : e.message}');
+        attempts.add('${GwnEndpoints.token} (${st.label}): ${e.message}');
       } catch (e) {
         attempts.add('${GwnEndpoints.token} (${st.label}): $e');
       } finally {
         probe.close(force: true);
       }
     }
-    throw GwnApiException(_loginDiagnosis(attempts), code: 'AUTH');
+    throw GwnApiException(gwnLoginDiagnosis(_credentials, attempts, lastSuccess: lastSuccess), code: 'AUTH');
   }
 
   String get _host => Uri.tryParse(_credentials.baseUrl)?.host ?? _credentials.baseUrl;
+
+  /// What the last successful login on this device used, when it is known.
+  /// A rejection reads very differently against it: the same key failing now
+  /// means it was changed at the portal, a different one means what is
+  /// stored here changed.
+  final GwnLastAuth? lastSuccess;
+
+  /// Called when a login succeeds, so the facts above can be kept.
+  final void Function(GwnLastAuth auth)? onAuthenticated;
 
   /// Signs a call the way the Open API expects: the secret key takes part in
   /// the signature but is never transmitted.
@@ -155,9 +187,9 @@ class GwnApiClient implements GwnApi {
   /// and the query carries access_token, appID, timestamp and signature.
   Map<String, Object?> _signedQuery(Map<String, Object?> body) {
     final ts = DateTime.now().millisecondsSinceEpoch;
-    final appId = _credentials.appId.trim();
+    final appId = GwnCredentials.clean(_credentials.appId);
     final bodyHash = sha256.convert(utf8.encode(jsonEncode(body))).toString();
-    final params = 'access_token=$_token&appID=$appId&secretKey=${_credentials.secretKey.trim()}&timestamp=$ts';
+    final params = 'access_token=$_token&appID=$appId&secretKey=${GwnCredentials.clean(_credentials.secretKey)}&timestamp=$ts';
     final signature = sha256.convert(utf8.encode('&$params&$bodyHash&')).toString();
     return {'access_token': _token, 'appID': appId, 'timestamp': ts, 'signature': signature};
   }
@@ -173,34 +205,6 @@ class GwnApiClient implements GwnApi {
       final other = method == 'GET' ? 'POST' : 'GET';
       return _raw(other, path, query: _signedQuery(body), body: body);
     }
-  }
-
-  /// Turns the probe log into something an operator can act on: whether the
-  /// host was reachable at all, whether it rejected the credentials, or
-  /// whether it simply has no endpoint at these paths.
-  String _loginDiagnosis(List<String> attempts) {
-    final joined = attempts.join('; ');
-    final host = Uri.tryParse(_credentials.baseUrl)?.host ?? _credentials.baseUrl;
-    final unreachable = attempts.every((a) => a.contains('Network error'));
-    final rejected = attempts.any((a) => a.contains('HTTP 401') || a.contains('HTTP 403'));
-    final notFound = attempts.every((a) => a.contains('HTTP 404') || a.contains('HTTP 405'));
-
-    final String lead;
-    if (unreachable) {
-      lead = 'Could not reach $host at all. Check the tablet has internet, and that the Region matches the data centre '
-          'your GWN account lives on.';
-    } else if (rejected) {
-      final others = GwnEndpoints.hosts.entries.where((e) => !e.value.contains(host)).map((e) => e.key).join(' or ');
-      lead = '$host answered the token request and rejected it. A GWN account belongs to one data centre, so the most '
-          'likely cause is the Region: if this App ID was issued on another one, try $others. Otherwise re-check the '
-          'App ID and Secret Key, and that the Open API is enabled for this account.';
-    } else if (notFound) {
-      lead = '$host is reachable but has no token endpoint at any path this build knows. The Open API paths in '
-          'GwnEndpoints need to be set from the developer portal.';
-    } else {
-      lead = 'Could not obtain a GWN Cloud token from $host.';
-    }
-    return '$lead\n\nTried: $joined';
   }
 
   /// A transport configured for this account. Probes take one each so a
@@ -500,11 +504,120 @@ class GwnApiClient implements GwnApi {
   }
 
   /// Whatever the server said about a failure, trimmed to one readable line.
+  ///
+  /// An error page from the servlet container starts with a stylesheet, so
+  /// truncating it raw hands the operator a screenful of CSS and cuts off the
+  /// one line that says what went wrong. Its title and headings carry that
+  /// line, and they come first.
   static String _detail(Object? data) {
     final text = data is String ? data : (data == null ? '' : jsonEncode(data));
-    final trimmed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    var trimmed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (trimmed.isEmpty) return '';
+    if (trimmed.startsWith('<')) {
+      final said = [
+        for (final m in RegExp(r'<(?:title|h1|h2|h3|b|p)[^>]*>(.*?)</(?:title|h1|h2|h3|b|p)>', caseSensitive: false).allMatches(trimmed))
+          m.group(1)!.replaceAll(RegExp(r'<[^>]*>'), '').trim(),
+      ].where((t) => t.isNotEmpty).toList();
+      if (said.isNotEmpty) trimmed = said.take(4).join(' · ');
+    }
     return ' — ${trimmed.length > 240 ? '${trimmed.substring(0, 240)}…' : trimmed}';
   }
 
+}
+
+/// Turns a failed login into something an operator can act on, without ever
+/// putting the Secret Key in a message that gets photographed and sent on.
+///
+/// Top-level and pure so the wording can be tested against each failure
+/// shape rather than only against whatever the network happens to do.
+/// Six hex characters of the key's SHA-256. Enough to tell two entries
+/// apart, nowhere near enough to recover a 32-character random key, and it
+/// keeps the secret out of a message that gets photographed and sent on.
+String gwnKeyFingerprint(String key) =>
+    key.isEmpty ? '–' : sha256.convert(utf8.encode(key)).toString().substring(0, 6);
+
+/// "3 days ago", for a diagnosis that has to be read on a tablet.
+String _ago(int ts) {
+  final d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts * 1000));
+  if (d.inMinutes < 60) return '${d.inMinutes} minutes ago';
+  if (d.inHours < 24) return '${d.inHours} hours ago';
+  return '${d.inDays} days ago';
+}
+
+/// Turns the probe log into something an operator can act on: whether the
+/// host was reachable at all, whether it rejected the credentials, or
+/// whether it simply has no endpoint at these paths.
+String gwnLoginDiagnosis(GwnCredentials credentials, List<String> attempts, {GwnLastAuth? lastSuccess}) {
+  final joined = attempts.join('; ');
+  final host = Uri.tryParse(credentials.baseUrl)?.host ?? credentials.baseUrl;
+  final unreachable = attempts.every((a) => a.contains('Network error'));
+  final rejected = attempts.any((a) => a.contains('HTTP 401') || a.contains('HTTP 403'));
+  final notFound = attempts.every((a) => a.contains('HTTP 404') || a.contains('HTTP 405'));
+
+  final String lead;
+  if (unreachable) {
+    lead = 'Could not reach $host at all. Check the tablet has internet, and that the Region matches the data centre '
+        'your GWN account lives on.';
+  } else if (rejected) {
+    final key = GwnCredentials.clean(credentials.secretKey);
+    final appId = GwnCredentials.clean(credentials.appId);
+    final tooShort = key.length < GwnCredentials.usualKeyLength;
+    final tooLong = key.length > GwnCredentials.usualKeyLength;
+    // A fingerprint of a short key could be walked back; below this length
+    // the length alone is the finding anyway.
+    final fp = key.length >= 16 ? gwnKeyFingerprint(key) : 'not shown for a key this short';
+    final sameKey = lastSuccess != null && lastSuccess.fingerprint == fp;
+    final sameHost = lastSuccess != null && lastSuccess.host == host;
+    // "invalid_client" is the server saying it could not authenticate the
+    // client at all, which a disabled grant type would not do — that fails
+    // later, after the client has been accepted.
+    final invalidClient = attempts.any((a) => a.contains('invalid_client'));
+
+    lead = [
+      '$host answered and rejected these credentials.',
+      '',
+      // Facts about the key, never the key: its length catches a half-typed
+      // one, and the fingerprint is a one-way hash, so two entries can be
+      // compared without either being shown.
+      'App ID $appId · Secret Key ${key.length} characters'
+          '${tooShort || tooLong ? ' (GWN issues ${GwnCredentials.usualKeyLength})' : ''} · fingerprint $fp · $host',
+      if (lastSuccess == null)
+        'This tablet has not authenticated with GWN Cloud since the app was installed, so there is nothing to compare '
+            'against. Reinstalling clears that history along with the credentials.'
+      else
+        'Last worked ${_ago(lastSuccess.ts)}: App ID ${lastSuccess.appId} · ${lastSuccess.keyLength} characters · '
+            'fingerprint ${lastSuccess.fingerprint} · ${lastSuccess.host}',
+      '',
+      if (tooShort)
+        'The key stored here is ${key.length} characters and GWN issues ${GwnCredentials.usualKeyLength}, so part of '
+            'it is missing. Copy the key from GWN Cloud and use Paste — the field is narrower than the key, so a short '
+            'one looks complete.'
+      else if (tooLong)
+        'The key stored here is ${key.length} characters and GWN issues ${GwnCredentials.usualKeyLength}, so something '
+            'extra came along with it. Clear the field and paste the key again.'
+      else if (sameKey)
+        'This is the same key that last worked, so it was changed at the portal. Issue or copy the current Secret Key '
+            'in GWN Cloud and paste it here — rotating a key kills the old one the moment the new one appears.'
+      else if (lastSuccess != null)
+        'This is not the key that last worked here. Either it was re-issued at the portal, or what was entered is not '
+            'the current key — copy it from GWN Cloud and paste it rather than typing it.'
+      else
+        'Most likely the Secret Key was re-issued: rotating a key in GWN Cloud kills the old one the moment the new '
+            'one appears. Copy the current key from the portal and paste it here rather than typing it.',
+      if (lastSuccess != null && !sameHost)
+        'The Region has also changed since then — it last worked on ${lastSuccess.host}.'
+      else if (lastSuccess == null)
+        'If the key is current, check the Region: a GWN account belongs to one data centre, and this App ID may have '
+            'been issued on ${GwnEndpoints.hosts.entries.where((e) => !e.value.contains(host)).map((e) => e.key).join(' or ')}.',
+      if (!invalidClient)
+        'If it keeps failing, check that the Open API is enabled for this account and that this App ID may use the '
+            'client-credentials grant.',
+    ].join('\n');
+  } else if (notFound) {
+    lead = '$host is reachable but has no token endpoint at any path this build knows. The Open API paths in '
+        'GwnEndpoints need to be set from the developer portal.';
+  } else {
+    lead = 'Could not obtain a GWN Cloud token from $host.';
+  }
+  return '$lead\n\nTried: $joined';
 }

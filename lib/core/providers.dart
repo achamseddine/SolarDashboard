@@ -7,6 +7,7 @@ import 'api/deye_api.dart';
 import 'api/gwn_api.dart';
 import 'api/json_utils.dart';
 import 'api/gwn_api_client.dart';
+import 'api/gwn_api_exception.dart';
 import 'api/deye_api_client.dart';
 import 'db/app_database.dart';
 import 'db/station_dao.dart';
@@ -138,6 +139,33 @@ final gwnIsDemoProvider = Provider<bool>((ref) {
   return demo || creds == null || !creds.isComplete;
 });
 
+/// What the last successful GWN login on this device used — not secret (a
+/// length, a one-way fingerprint, a host), kept in preferences so a later
+/// rejection can say what changed. Cleared by an uninstall like everything
+/// else, which the diagnosis says rather than hides.
+final gwnLastAuthProvider = NotifierProvider<GwnLastAuthNotifier, GwnLastAuth?>(GwnLastAuthNotifier.new);
+
+class GwnLastAuthNotifier extends Notifier<GwnLastAuth?> {
+  @override
+  GwnLastAuth? build() {
+    final prefs = ref.read(sharedPrefsProvider);
+    return GwnLastAuth.fromPrefs(prefs.getString, prefs.getInt);
+  }
+
+  Future<void> record(GwnLastAuth auth) async {
+    final prefs = ref.read(sharedPrefsProvider);
+    for (final e in auth.toPrefs().entries) {
+      final v = e.value;
+      if (v is int) {
+        await prefs.setInt(e.key, v);
+      } else {
+        await prefs.setString(e.key, '$v');
+      }
+    }
+    state = auth;
+  }
+}
+
 /// The GWN Cloud gateway: the real client when the account is configured,
 /// synthetic data otherwise.
 final gwnApiProvider = Provider<GwnApi>((ref) {
@@ -145,7 +173,13 @@ final gwnApiProvider = Provider<GwnApi>((ref) {
   if (ref.watch(gwnIsDemoProvider)) {
     return DemoGwnApi(seeds: ref.read(demoSeedsProvider));
   }
-  final api = GwnApiClient(credentials: creds!);
+  final api = GwnApiClient(
+    credentials: creds!,
+    // Read, not watched: recording a success must not rebuild the client
+    // that just produced it.
+    lastSuccess: ref.read(gwnLastAuthProvider),
+    onAuthenticated: (a) => ref.read(gwnLastAuthProvider.notifier).record(a),
+  );
   ref.onDispose(api.close);
   return api;
 });
@@ -170,17 +204,27 @@ class NetworkSyncReportNotifier extends Notifier<NetworkSyncReport?> {
   bool _running = false;
   bool get isRunning => _running;
 
+  /// Why the last attempt failed, until one succeeds. Without it the
+  /// Connectivity page reads "not synchronised yet" while the account is being
+  /// refused, and the reason is only found by opening Settings and pressing
+  /// Test.
+  String? _lastError;
+  String? get lastError => _lastError;
+
   Future<void> sync() async {
     if (_running) return;
     _running = true;
     ref.notifyListeners();
     try {
       state = await ref.read(networkSyncProvider).run();
+      _lastError = null;
     } catch (e) {
+      _lastError = e is GwnApiException ? e.message : '$e';
       ref.read(appLogProvider.notifier).add('GWN sync failed: $e');
       rethrow;
     } finally {
       _running = false;
+      ref.notifyListeners();
     }
   }
 }

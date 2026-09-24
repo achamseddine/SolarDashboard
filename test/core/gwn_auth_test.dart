@@ -37,24 +37,53 @@ Dio _dioWith(HttpClientAdapter adapter) {
 const creds = GwnCredentials(appId: '667041', secretKey: 's3cret', baseUrl: 'https://www.gwn.cloud');
 
 void main() {
-  test('the token is fetched from /oauth/token with client_credentials', () async {
+  test('the token is fetched with the key in the body, never first in a URL', () async {
     final server = _FakeServer((o) => o.path == GwnEndpoints.token
         ? _json('{"access_token":"t0ken","expires_in":3600}', 200)
         : _json('{"data":[]}', 200));
-    final client = GwnApiClient(credentials: creds, dio: _dioWith(server));
+    GwnLastAuth? recorded;
+    final client = GwnApiClient(credentials: creds, dio: _dioWith(server), onAuthenticated: (a) => recorded = a);
     addTearDown(client.close);
 
     await client.authenticate();
 
+    // A query string lands in every access log on the way; the body does not.
     final token = server.seen.single;
     expect(token.path, '/oauth/token');
-    expect(token.method, 'GET');
-    expect(token.queryParameters, {
-      'grant_type': 'client_credentials',
-      'client_id': '667041',
-      'client_secret': 's3cret',
-    });
-    expect(client.lastProbe['token'], startsWith('/oauth/token'));
+    expect(token.method, 'POST');
+    expect(token.uri.toString(), isNot(contains('s3cret')));
+    expect(token.data, 'grant_type=client_credentials&client_id=667041&client_secret=s3cret');
+    expect(client.lastProbe['token'], '/oauth/token (POST form)');
+
+    // …and the success is remembered, without the key.
+    expect(recorded, isNotNull);
+    expect(recorded!.keyLength, 6);
+    expect(recorded!.fingerprint, gwnKeyFingerprint('s3cret'));
+    expect(recorded!.host, 'www.gwn.cloud');
+    expect(recorded!.strategy, 'POST form');
+  });
+
+  test('a key with reserved characters survives the form body', () async {
+    final server = _FakeServer((o) => _json('{"access_token":"t0ken"}', 200));
+    const odd = GwnCredentials(appId: '667041', secretKey: 'a+b&c=d%e', baseUrl: 'https://www.gwn.cloud');
+    final client = GwnApiClient(credentials: odd, dio: _dioWith(server));
+    addTearDown(client.close);
+
+    await client.authenticate();
+    final body = server.seen.single.data as String;
+    expect(Uri.splitQueryString(body)['client_secret'], 'a+b&c=d%e');
+  });
+
+  test('the URL-bearing strategy is the last resort', () async {
+    final server = _FakeServer((o) => o.method == 'GET'
+        ? _json('{"access_token":"t0ken"}', 200)
+        : _json('{"error":"unsupported"}', 400));
+    final client = GwnApiClient(credentials: creds, dio: _dioWith(server));
+    addTearDown(client.close);
+
+    await client.authenticate();
+    expect(server.seen.map((o) => o.method), ['POST', 'POST', 'GET']);
+    expect(client.lastProbe['token'], '/oauth/token (GET query)');
   });
 
   test('signed calls carry appID, timestamp and a signature — never the secret', () async {
@@ -110,7 +139,7 @@ void main() {
     await expectLater(
       client.authenticate(),
       throwsA(isA<GwnApiException>().having((e) => e.message, 'message', allOf(
-        contains('rejected it'),
+        contains('rejected these credentials'),
         contains('www.gwn.cloud'),
         // A GWN account belongs to one data centre, so name the others.
         contains('eu.gwn.cloud'),

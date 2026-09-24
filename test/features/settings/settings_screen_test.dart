@@ -35,6 +35,10 @@ void main() {
     await scrollTo(find.text('Synchronisation'));
     final dark = find.widgetWithText(SwitchListTile, 'Dark mode');
     await scrollTo(dark);
+    // Scrolling stops the moment the row exists, which can leave it half off
+    // the viewport; the tap has to land on it, not near it.
+    await tester.ensureVisible(dark);
+    await tester.pump();
     await tester.tap(dark);
     await TestEnv.settle(tester, rounds: 1);
     expect(env.prefs.getBool('settings.darkMode'), isTrue);

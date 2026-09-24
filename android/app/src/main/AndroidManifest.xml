@@ -3,9 +3,16 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Credentials live in the platform secure store, whose key material
+         belongs to this install. Android's automatic backup would carry the
+         ciphertext to a restore that cannot decrypt it, leaving the app with
+         credentials it can neither read nor see are broken. -->
     <application
         android:label="UNICEF School Solar"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

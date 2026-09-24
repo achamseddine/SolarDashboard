@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/gwn_api_exception.dart';
 import '../../core/models/network_filter.dart';
 import '../../core/models/network_insights.dart';
 import '../../core/providers.dart';
@@ -149,7 +150,7 @@ class _NoNetworksState extends ConsumerState<_NoNetworks> {
     try {
       await ref.read(networkSyncReportProvider.notifier).sync();
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = e is GwnApiException ? e.message : '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -159,6 +160,10 @@ class _NoNetworksState extends ConsumerState<_NoNetworks> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final configured = !ref.watch(gwnIsDemoProvider);
+    // The automatic first sync fails quietly by design; its reason belongs
+    // here, or a refused account reads as "not pulled yet" forever.
+    ref.watch(networkSyncReportProvider);
+    final error = _error ?? ref.read(networkSyncReportProvider.notifier).lastError;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
@@ -200,9 +205,9 @@ class _NoNetworksState extends ConsumerState<_NoNetworks> {
                   ),
                 ],
               ),
-              if (_error != null) ...[
+              if (error != null) ...[
                 const SizedBox(height: 12),
-                SelectableText(_error!, style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error), textAlign: TextAlign.center),
+                SelectableText(error, style: t.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
               ],
             ],
           ),
@@ -223,31 +228,90 @@ class _SourceBanner extends ConsumerWidget {
     final demo = ref.watch(gwnIsDemoProvider);
     final report = ref.watch(networkSyncReportProvider);
     final running = ref.watch(networkSyncReportProvider.notifier).isRunning;
+    final error = ref.read(networkSyncReportProvider.notifier).lastError;
+    final row = Row(
+      children: [
+        Expanded(
+          child: Text(
+            [
+              if (demo) 'Synthetic demo data — no GWN Cloud account is configured',
+              if (!demo && report != null) 'Synchronised ${Fmt.ago(report.finishedTs)}',
+              if (!demo && report == null) 'Not synchronised yet in this session',
+              '${Fmt.int_(insights.networks)} networks · ${Fmt.int_(insights.schools.length)} schools · last ${insights.days} days',
+              if (report?.message != null) report!.message!,
+            ].join(' · '),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: running ? null : () => ref.read(networkSyncReportProvider.notifier).sync(),
+          icon: running
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.sync, size: 18),
+          label: Text(running ? 'Syncing…' : 'Sync networks'),
+        ),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: kGap),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              [
-                if (demo) 'Synthetic demo data — no GWN Cloud account is configured',
-                if (!demo && report != null) 'Synchronised ${Fmt.ago(report.finishedTs)}',
-                if (!demo && report == null) 'Not synchronised yet in this session',
-                '${Fmt.int_(insights.networks)} networks · ${Fmt.int_(insights.schools.length)} schools · last ${insights.days} days',
-                if (report?.message != null) report!.message!,
-              ].join(' · '),
-              style: Theme.of(context).textTheme.bodySmall,
+      child: error == null || demo
+          ? row
+          : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_SyncFailure(error: error), row]),
+    );
+  }
+}
+
+/// The last synchronisation failed: the figures below are from before it,
+/// and the reason is one tap away.
+class _SyncFailure extends StatelessWidget {
+  const _SyncFailure({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Card(
+      color: scheme.errorContainer,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: scheme.onErrorContainer, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'The last sync failed, so the figures below are from before it. ${error.split('\n').first}',
+                style: t.bodySmall?.copyWith(color: scheme.onErrorContainer),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: running ? null : () => ref.read(networkSyncReportProvider.notifier).sync(),
-            icon: running
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.sync, size: 18),
-            label: Text(running ? 'Syncing…' : 'Sync networks'),
-          ),
-        ],
+            TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (c) => AlertDialog(
+                  title: const Text('Why the sync failed'),
+                  content: SingleChildScrollView(child: SelectableText(error)),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Close')),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.of(c).pop();
+                        goTo(context, '/settings');
+                      },
+                      child: const Text('Open Settings'),
+                    ),
+                  ],
+                ),
+              ),
+              child: const Text('Details'),
+            ),
+          ],
+        ),
       ),
     );
   }
