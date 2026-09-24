@@ -178,6 +178,18 @@ off the repository: losing it means every tablet has to uninstall and reinstall 
 |-----------------------------------------|--|
 | ![Network schools](docs/screenshots/network_schools.png) | |
 
+Every number on the connectivity dashboards opens what it is made of — the
+definition, the thresholds in force, and the schools behind the figure, each
+of which opens its own record.
+
+| A headline tile and the schools behind it | One school's full network record |
+|--------------------------------------------|-----------------------------------|
+| ![Headline drill-down](docs/screenshots/network_drill_tile.png) | ![School record](docs/screenshots/network_school_record.png) |
+
+| An infrastructure figure and the schools behind it | |
+|------------------------------------------------------|--|
+| ![Infrastructure drill-down](docs/screenshots/network_drill_infrastructure.png) | |
+
 | Schools directory | School record |
 |-------------------|---------------|
 | ![Schools](docs/screenshots/schools.png) | ![School record](docs/screenshots/school_record.png) |
