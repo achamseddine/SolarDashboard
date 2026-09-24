@@ -179,6 +179,30 @@ class GwnDevice {
     );
   }
 
+  /// The same device, reclassified — used when the endpoint a row came from
+  /// says more about its role than the row's own fields do.
+  GwnDevice asKind(GwnDeviceKind k) => GwnDevice(
+        networkId: networkId,
+        mac: mac,
+        name: name,
+        kind: k,
+        status: status,
+        model: model,
+        firmware: firmware,
+        ip: ip,
+        uptimeSeconds: uptimeSeconds,
+        clientCount: clientCount,
+        cpuPercent: cpuPercent,
+        memoryPercent: memoryPercent,
+        poePortsTotal: poePortsTotal,
+        poePortsActive: poePortsActive,
+        poePortsFailed: poePortsFailed,
+        portsUp: portsUp,
+        portsDown: portsDown,
+        portsError: portsError,
+        lastSeenTs: lastSeenTs,
+      );
+
   factory GwnDevice.fromRow(Map<String, Object?> r) => GwnDevice(
         networkId: r['network_id'] as String,
         mac: r['mac'] as String,
@@ -271,14 +295,33 @@ class GwnNetworkDay {
 
   int? get totalBytes => rxBytes == null && txBytes == null ? null : (rxBytes ?? 0) + (txBytes ?? 0);
 
+  /// Observations a day needs before a sampled share is worth calling
+  /// uptime. One look can only ever say 0 % or 100 %, which would let a
+  /// single glance certify a school as meeting a 95 % target.
+  static const int minObservations = 4;
+
+  /// True once the day carries enough looks for [uptimeShare] to mean
+  /// something, or the source reported minutes directly.
+  bool get hasUptime =>
+      (wanUpMinutes != null && (expectedMinutes ?? 0) > 0) || (observations ?? 0) >= minObservations;
+
   double? get uptimeShare {
     // Minutes when the source reports them; otherwise the share of the app's
     // own observations that found the network up.
     final up = wanUpMinutes, exp = expectedMinutes;
     if (up != null && exp != null && exp > 0) return (up / exp).clamp(0.0, 1.0);
     final n = observations, on = onlineObservations;
-    if (n == null || on == null || n <= 0) return null;
+    if (n == null || on == null || n < minObservations) return null;
     return (on / n).clamp(0.0, 1.0);
+  }
+
+  /// Whether any look that day found the network up. Knowable from a single
+  /// observation, unlike [uptimeShare].
+  bool? get wasSeenOnline {
+    final on = onlineObservations;
+    if (on != null) return on > 0;
+    final up = wanUpMinutes;
+    return up == null ? null : up > 0;
   }
 
   factory GwnNetworkDay.fromRow(Map<String, Object?> r) => GwnNetworkDay(

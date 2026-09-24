@@ -25,7 +25,7 @@ class NetworkHeadlineKpis extends StatelessWidget {
         KpiTile(
           label: 'Schools connected',
           value: Fmt.int_(d.connected),
-          hint: 'of ${Fmt.int_(d.publicSchools)} public schools · ${Fmt.ratio(d.connectedShare)}',
+          hint: 'seen online at least once · of ${Fmt.int_(d.publicSchools)} public schools',
           icon: Icons.wifi,
           color: AppColors.unicefCyan,
         ),
@@ -39,7 +39,7 @@ class NetworkHeadlineKpis extends StatelessWidget {
         KpiTile(
           label: 'Meaningfully connected',
           value: Fmt.int_(d.meaningfullyConnected),
-          hint: 'uptime ≥ ${Fmt.ratio(d.thresholds.uptimeTarget)} · speed and quality not measured',
+          hint: 'uptime ≥ ${Fmt.ratio(d.thresholds.uptimeTarget)} over a day of checks · speed and quality not measured',
           icon: Icons.speed,
         ),
         KpiTile(
@@ -52,14 +52,14 @@ class NetworkHeadlineKpis extends StatelessWidget {
         KpiTile(
           label: 'High digital adoption',
           value: Fmt.int_(d.highAdoption),
-          hint: 'index ≥ ${d.thresholds.highAdoptionIndex.round()}',
+          hint: 'sustained use · only where use was measured',
           icon: Icons.trending_up,
           color: AppColors.good,
         ),
         KpiTile(
           label: 'Low / no adoption',
           value: Fmt.int_(d.lowAdoption),
-          hint: 'index < ${d.thresholds.lowAdoptionIndex.round()}',
+          hint: 'weak use despite the network · only where use was measured',
           icon: Icons.trending_down,
           color: AppColors.warning,
         ),
@@ -80,7 +80,9 @@ class NetworkHeadlineKpis extends StatelessWidget {
         KpiTile(
           label: 'Average network uptime',
           value: Fmt.ratio(d.avgUptime, decimals: 1),
-          hint: 'across ${Fmt.int_(d.schools.length)} reporting schools',
+          hint: d.avgUptime == null
+              ? 'needs several checks in a day before a share means anything'
+              : 'across the schools checked often enough to tell',
           icon: Icons.timeline,
         ),
         KpiTile(
@@ -360,6 +362,7 @@ class NetworkTrendCard extends StatelessWidget {
             height: 220,
             maxLabels: 10,
             unitFormatter: (v) => Fmt.int_(v),
+            emptyMessage: 'No client counts recorded yet',
           ),
           const MutedNote(
             'Unique device identifiers are a proxy for devices, not for students: modern phones randomise their MAC '

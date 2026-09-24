@@ -85,13 +85,25 @@ class NetworkInsightsBuilder {
     final uptimes = <double>[];
     final quadrants = {for (final q in AdoptionQuadrant.values) q: 0};
     for (final s in schools) {
-      if ((s.uptimeShare ?? 0) > 0) connected++;
+      if (s.seenOnline) connected++;
       if (s.lanOperational) lan++;
       final ap = s.apAvailability;
-      if ((s.uptimeShare ?? 0) >= t.uptimeTarget && (ap == null || ap >= t.apAvailabilityTarget)) meaningful++;
+      // Meaningful connectivity needs a real uptime figure, not one look.
+      if (s.uptimeShare != null && s.uptimeShare! >= t.uptimeTarget && (ap == null || ap >= t.apAvailabilityTarget)) {
+        meaningful++;
+      }
       if ((s.activityShare ?? 0) >= t.activeUseShare) active++;
-      if ((s.index ?? 0) >= t.highAdoptionIndex) high++;
-      if (s.index != null && s.index! < t.lowAdoptionIndex) low++;
+      // Adoption is only judged where use was actually observed. Counting a
+      // school as "low adoption" because nothing has been measured yet is
+      // exactly the punitive reading the framework warns against.
+      // "High digital adoption" and "low / no adoption" are statements about
+      // use, so they read the usage score. The composite index carries the
+      // infrastructure weight too and would rate an unused school around 60.
+      final u = s.usageScore;
+      if (u != null) {
+        if (u >= t.highAdoptionIndex) high++;
+        if (u < t.lowAdoptionIndex) low++;
+      }
       if (s.hasFault) technical++;
       if (s.quadrant == AdoptionQuadrant.adoptionSupport) support++;
       if (s.uptimeShare != null) uptimes.add(s.uptimeShare!);
@@ -292,7 +304,12 @@ class NetworkInsightsBuilder {
     // other, so a healthy school with no use is told apart from a used school
     // with a broken network.
     final usageParts = <double>[?wifi, ?regularity];
-    final usage = usageParts.isEmpty ? null : usageParts.reduce((a, b) => a + b) / usageParts.length;
+    // Days that carry no client or traffic figure say nothing about use, so
+    // they must not be read as "no use".
+    final measuredDays = days.where((d) => d.uniqueClients != null || d.totalBytes != null).length;
+    final usage = usageParts.isEmpty || measuredDays == 0
+        ? null
+        : usageParts.reduce((a, b) => a + b) / usageParts.length;
     final quadrant = infra == null || usage == null
         ? AdoptionQuadrant.unknown
         : infra >= thresholds.infrastructureHealthy
@@ -331,6 +348,9 @@ class NetworkInsightsBuilder {
       schoolDays: days.length,
       usageGrowth: growth,
       teachingHoursShare: teachingShare,
+      seenOnline: days.any((d) => d.wasSeenOnline == true),
+      hasUsageEvidence: measuredDays > 0,
+      usageScore: usage,
       openAlarms: alarms.where((a) => a.isOpen).length,
       openCriticalAlarms: alarms.where((a) => a.isOpen && a.level == GwnAlarmLevel.critical).length,
       components: components,

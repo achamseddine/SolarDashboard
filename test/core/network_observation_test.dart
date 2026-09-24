@@ -28,10 +28,11 @@ void main() {
     await db.networks.recordObservation(_seen(clients: 12, apsOnline: 4), online: true);
     await db.networks.recordObservation(_seen(clients: 40, apsOnline: 4), online: true);
     await db.networks.recordObservation(_seen(clients: 9, apsOnline: 3), online: true);
+    await db.networks.recordObservation(_seen(clients: 11, apsOnline: 4), online: true);
 
     final day = (await db.networks.getDaily()).single;
-    expect(day.observations, 3);
-    expect(day.onlineObservations, 3);
+    expect(day.observations, 4);
+    expect(day.onlineObservations, 4);
     expect(day.peakClients, 40, reason: 'the busiest look is the day\'s peak');
     expect(day.uniqueClients, 40);
     expect(day.uptimeShare, 1.0);
@@ -95,5 +96,24 @@ void main() {
     // The row that was already there survives.
     final rows = await db.networks.getDaily();
     expect(rows.single.uniqueClients, 5);
+  });
+
+  test('a single look cannot certify uptime', () async {
+    final db = await _db();
+    addTearDown(db.close);
+
+    await db.networks.recordObservation(_seen(clients: 10, apsOnline: 4), online: true);
+    var day = (await db.networks.getDaily()).single;
+    expect(day.wasSeenOnline, isTrue, reason: 'one look does show it was up');
+    expect(day.uptimeShare, isNull, reason: 'but one look is not a percentage');
+    expect(day.hasUptime, isFalse);
+
+    // Once enough looks accrue, the share is reportable.
+    for (var i = 0; i < GwnNetworkDay.minObservations - 1; i++) {
+      await db.networks.recordObservation(_seen(clients: 10, apsOnline: 4), online: true);
+    }
+    day = (await db.networks.getDaily()).single;
+    expect(day.hasUptime, isTrue);
+    expect(day.uptimeShare, 1.0);
   });
 }

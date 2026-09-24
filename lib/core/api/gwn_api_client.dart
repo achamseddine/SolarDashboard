@@ -369,8 +369,40 @@ class GwnApiClient implements GwnApi {
       try {
         final rows = await _pagedCall(entry.$1, entry.$2, body: body);
         for (final r in rows) {
-          if ((asString(pick(r, ['mac', 'macAddress', 'mac_address', 'deviceMac'])) ?? '').isEmpty) continue;
-          final d = GwnDevice.fromJson(r, networkId: networkId);
+          var d = GwnDevice.fromJson(r, networkId: networkId);
+          // Rows from ap/list are access points whatever their type field
+          // says; without this a payload with no type reads as "other" and
+          // disappears from AP availability.
+          if (entry.$1 == 'aps' && d.kind == GwnDeviceKind.other) {
+            d = d.asKind(GwnDeviceKind.accessPoint);
+          }
+          if (d.mac.isEmpty) {
+            // A device whose address sits under a key this build does not
+            // know still counts; any stable identifier will key the row.
+            final id = asString(pick(r, ['id', 'deviceId', 'sn', 'serialNumber', 'serial', 'uuid']));
+            if (id == null || id.isEmpty) continue;
+            d = GwnDevice(
+              networkId: d.networkId,
+              mac: id.toUpperCase(),
+              name: d.name,
+              kind: d.kind,
+              status: d.status,
+              model: d.model,
+              firmware: d.firmware,
+              ip: d.ip,
+              uptimeSeconds: d.uptimeSeconds,
+              clientCount: d.clientCount,
+              cpuPercent: d.cpuPercent,
+              memoryPercent: d.memoryPercent,
+              poePortsTotal: d.poePortsTotal,
+              poePortsActive: d.poePortsActive,
+              poePortsFailed: d.poePortsFailed,
+              portsUp: d.portsUp,
+              portsDown: d.portsDown,
+              portsError: d.portsError,
+              lastSeenTs: d.lastSeenTs,
+            );
+          }
           if (out.any((x) => x.mac == d.mac)) continue;
           out.add(d);
         }

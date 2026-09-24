@@ -205,6 +205,7 @@ class EnergyBarChart extends StatelessWidget {
     this.showLegend = true,
     this.maxLabels = 12,
     this.signed = false,
+    this.emptyMessage = 'No energy data for this period',
   });
 
   final List<String> seriesLabels;
@@ -220,12 +221,17 @@ class EnergyBarChart extends StatelessWidget {
   /// history reads as one mirrored bar per day instead of two charts.
   final bool signed;
 
+  /// Shown when there is nothing to plot. The default speaks of energy
+  /// because that is where this chart began; anything else must say what it
+  /// is actually missing.
+  final String emptyMessage;
+
   @override
   Widget build(BuildContext context) {
     final c = _Chrome(context);
     final fmt = unitFormatter ?? (v) => Fmt.energy(v);
     if (groups.isEmpty || groups.every((g) => g.values.every((v) => v == null || v == 0))) {
-      return SizedBox(height: height, child: const EmptyState(message: 'No energy data for this period', icon: Icons.bar_chart));
+      return SizedBox(height: height, child: EmptyState(message: emptyMessage, icon: Icons.bar_chart));
     }
     final n = seriesLabels.length;
     var maxY = 0.0;

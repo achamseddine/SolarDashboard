@@ -121,6 +121,9 @@ class SchoolNetwork {
     // Support (section 7)
     this.openAlarms = 0,
     this.openCriticalAlarms = 0,
+    this.seenOnline = false,
+    this.hasUsageEvidence = false,
+    this.usageScore,
     required this.components,
     required this.index,
     required this.availableWeight,
@@ -165,6 +168,21 @@ class SchoolNetwork {
 
   final int openAlarms;
   final int openCriticalAlarms;
+
+  /// At least one observation found this school's network up. Knowable from
+  /// a single look, unlike a percentage.
+  final bool seenOnline;
+
+  /// At least one day carried a client count or traffic figure, so the
+  /// adoption indicators are judging something that was measured.
+  final bool hasUsageEvidence;
+
+  /// How much the network is actually used, 0–100: Wi-Fi utilisation and
+  /// regularity only. The framework's "low / no adoption" means healthy
+  /// infrastructure with weak use, so it reads this rather than the index —
+  /// which, with the platform components unavailable, is half infrastructure
+  /// and would rate an unused school around 60.
+  final double? usageScore;
 
   final List<IndexComponent> components;
 
