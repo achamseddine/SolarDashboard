@@ -22,9 +22,12 @@ class NetworkSchoolLinker {
   /// GWN names its networks `<CERD>- <school name>` in this deployment, so
   /// the leading number is an exact key rather than something to guess at.
   /// Tried first; the name comparison below is only the fallback.
-  /// CERDs start at 1, so a single digit counts. A number that is not a CERD
-  /// in the dataset is ignored and the name comparison takes over.
-  static final RegExp cerdPrefix = RegExp(r'^\s*(\d{1,6})\s*[-–—_:.]');
+  /// The leading number, however it is punctuated. The account writes
+  /// `1000- name`, `388A-name`, `1080 Bname`, `1242 B1-name` and
+  /// `441 name`, so requiring a separator after the digits missed most of
+  /// them. Any number that is not a CERD in the dataset is ignored and the
+  /// name comparison takes over, so reading too eagerly costs nothing.
+  static final RegExp cerdPrefix = RegExp(r'^\s*(\d{1,6})(?!\d)');
 
   /// The CERD a network name carries, if it carries one.
   static int? cerdFromName(String name) {
@@ -50,7 +53,7 @@ class NetworkSchoolLinker {
 
     // Otherwise compare names, with any numeric prefix removed so it cannot
     // drown out the words that actually identify the school.
-    final bare = network.name.replaceFirst(cerdPrefix, ' ');
+    final bare = network.name.replaceFirst(RegExp(r'^\s*\d{1,6}\s*[A-Za-z]?\d*\s*[-–—_:.]?'), ' ');
     final tokens = StationSchoolLinker.tokenize(bare);
     if (tokens.isEmpty) return null;
 

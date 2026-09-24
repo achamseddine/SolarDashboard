@@ -173,7 +173,9 @@ class AdoptionMatrixCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: MutedNote(
                 '${Fmt.int_(q[AdoptionQuadrant.unknown])} schools cannot be placed yet: the usage axis needs a client '
-                'count or traffic figure, and nothing has been measured for them so far.',
+                'count or traffic figure, and nothing has been measured for them so far. That is why the quadrants '
+                'read zero while ${Fmt.int_(insights.technicalIntervention)} schools are already flagged for technical '
+                'intervention — a fault is visible on the infrastructure axis alone, but placing a school needs both.',
               ),
             ),
         ],

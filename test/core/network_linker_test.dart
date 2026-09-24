@@ -53,4 +53,36 @@ void main() {
     }
     expect(linked, sample.length, reason: 'every network with a CERD prefix should link');
   });
+
+  test('the prefix is read however the account punctuates it', () {
+    final linker = NetworkSchoolLinker(TestEnv.dataset.schools);
+
+    // Exactly the spellings the live account uses: a separator, a building
+    // letter, a letter and digit, or nothing but a space.
+    const names = {
+      '1000- متوسطة الصويري الرسمية': 1000,
+      '388A-مدرسة النور الرسمية المختلطة': 388,
+      '1080 Bجوزيف حرب المختلطة': 1080,
+      '1242 B1-ثانوية دير كيفا الرسمية': 1242,
+      '1242 B2 - ثانوية دير كيفا الرسمية': 1242,
+      '441 مدرسة البداوي الرسمية للبنات': 441,
+      '1356b-متوسطة حوشقيصر الرسمية': 1356,
+    };
+
+    for (final e in names.entries) {
+      expect(NetworkSchoolLinker.cerdFromName(e.key), e.value, reason: e.key);
+      final m = linker.match(GwnNetwork(id: 'x', name: e.key));
+      expect(m?.school.cerd, e.value, reason: 'no link for ${e.key}');
+    }
+
+    // Two buildings of one school both link to it — that is correct, not a
+    // duplicate to guard against.
+    expect(
+      linker.match(const GwnNetwork(id: 'a', name: '1242 B1-x'))?.school.cerd,
+      linker.match(const GwnNetwork(id: 'b', name: '1242 B2-x'))?.school.cerd,
+    );
+
+    // A name with no leading number is still only matched on its words.
+    expect(NetworkSchoolLinker.cerdFromName('Barqayel Mixed Public School'), isNull);
+  });
 }

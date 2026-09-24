@@ -261,8 +261,10 @@ class _FaultsCard extends StatelessWidget {
                 if (s.portsError > 0) '${s.portsError} ports with errors',
                 if (s.openCriticalAlarms > 0) '${s.openCriticalAlarms} critical alarms',
               ].join(' · '),
-              trailing: Fmt.ratio(s.uptimeShare, decimals: 1),
-              trailingHint: 'uptime',
+              // Uptime is blank until a day of checks accrues; the access
+              // points are the signal a technician acts on.
+              trailing: s.apsTotal == 0 ? Fmt.ratio(s.uptimeShare, decimals: 1) : '${s.apsOnline} / ${s.apsTotal}',
+              trailingHint: s.apsTotal == 0 ? 'uptime' : 'APs up',
             ),
           if (faults.length > 40) MutedNote('${Fmt.int_(faults.length - 40)} more not shown.'),
         ],

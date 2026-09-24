@@ -71,9 +71,16 @@ class NetworkSync {
       if (daily == 0) 'daily counters',
       if (ssid == 0) 'per-SSID traffic',
     ];
-    if (empty.isEmpty) return null;
-    final why = empty.map((k) => '$k (${notes[k] ?? 'not called'})').join('; ');
-    return '$networks networks synced, but nothing came back for: $why';
+    // Field names the account returned. Names only, no values — it is the
+    // one thing the parsing has to be matched against, and it is far easier
+    // to read here than behind a separate diagnostic.
+    final fields = notes.entries.where((e) => e.key.startsWith('fields:')).map((e) => '${e.key.substring(7)}: ${e.value}');
+    final parts = <String>[
+      if (empty.isNotEmpty) 'nothing came back for: ${empty.map((k) => '$k (${notes[k] ?? 'not called'})').join('; ')}',
+      if (fields.isNotEmpty) 'fields returned — ${fields.join(' | ')}',
+    ];
+    if (parts.isEmpty) return null;
+    return '$networks networks synced · ${parts.join(' · ')}';
   }
 
   /// Retention: daily rows older than this many days are dropped.
@@ -198,7 +205,6 @@ class NetworkSync {
     if (client is GwnApiClient) {
       client.fieldsSeen.forEach((k, v) => notes['fields:$k'] = v.join(', '));
     }
-
     return NetworkSyncReport(
       networks: networks.length,
       devices: devices,
